@@ -74,34 +74,8 @@ void g4() {
         //	LL_SPI_Enable(SPI1); // pA5-sck pA7-mosi
         //---------------------------------
     }
-    // LL_USART_TransmitData9(USART1, 15);
-    // LL_USART_EnableDirectionTx(USART1);
-    // LL_USART_ClearFlag_TC(USART1);
-    // LL_USART_DisableDirectionTx(USART1);
-    // LL_USART_ClearFlag_TC(USART1);
-    // LL_USART_EnableDirectionTx(USART1);
-    // LL_USART_ClearFlag_TC(USART1);
-    // LL_USART_DisableDirectionTx(USART1);
-    // LL_USART_ClearFlag_TC(USART1);
-    // LL_USART_EnableDirectionTx(USART1);
-    // LL_USART_ClearFlag_TC(USART1);
-    // LL_USART_DisableDirectionTx(USART1);
-    // LL_USART_ClearFlag_TC(USART1);
-    // LL_USART_EnableDirectionTx(USART1);
-    // LL_USART_ClearFlag_TC(USART1);
-    // LL_USART_DisableDirectionTx(USART1);
-    // LL_USART_ClearFlag_TC(USART1);
 
-    // USART1_Send(3, 1, 16);
-    // while (1) {}
     while (1) {
-        //		if (TIM2->CNT > 1000000) {
-        //			TIM2->CNT = 0;
-        //			GPIOA->BSRR |= 0x200; // pA9
-        //			GPIOA->BSRR |= 0x2000000; // pA9
-        //		}
-
-        // GPIOC->BSRR = 0x40; // pC6 led
         for (int i = 0; i < 7; ++i) {
 
             if (f[i] != 0) {
@@ -144,7 +118,6 @@ void g4() {
             dequeOn.pop_front();
             fl = 0;
         }
-        // GPIOC->BSRR = 0x400000; // pC6 led
     }
 }
 
@@ -185,33 +158,21 @@ void USART1_Send(uint8_t compN, uint8_t dot, int value) {
     c = convert16to8x2(value);
     tx_settings[3] = c.a;
     tx_settings[4] = c.b;
-    while (!LL_USART_IsActiveFlag_TXE(USART1)) {
-        // debugg(); // DEBUG
-    }
+    while (!LL_USART_IsActiveFlag_TXE(USART1)) {}
     for (int i = 0; i < tx_settings_length; i++) {
         LL_USART_TransmitData9(USART1, tx_settings[i]);
-        while (!LL_USART_IsActiveFlag_TXE(USART1)) {
-            // debugg(); // DEBUG
-        }
+        while (!LL_USART_IsActiveFlag_TXE(USART1)) {}
     }
-    while (!LL_USART_IsActiveFlag_TC(USART1)) {
-        // debugg(); // DEBUG
-    }
+    while (!LL_USART_IsActiveFlag_TC(USART1)) {}
     LL_USART_DisableDirectionTx(USART1);
     LL_USART_ClearFlag_TC(USART1);
 }
 
 void USART1_Receive() {
-    while (!LL_USART_IsActiveFlag_RXNE(USART1)) {
-        // debugg(); // DEBUG
-    }
+    while (!LL_USART_IsActiveFlag_RXNE(USART1)) {}
     rx_settings[0] = LL_USART_ReceiveData9(USART1);
     for (int i = 0; i < rx_settings_length; i++) {
-        while (!LL_USART_IsActiveFlag_RXNE(USART1)) {
-            // GPIOA->BSRR |= 0x400; // pA10 // for test
-            // GPIOA->BSRR |= 0x4000000; // pA10
-            // debugg(); // DEBUG
-        }
+        while (!LL_USART_IsActiveFlag_RXNE(USART1)) {}
         rx_settings[i] = LL_USART_ReceiveData9(USART1);
     }
     compN_ = rx_settings[1];
@@ -224,7 +185,6 @@ void USART1_Receive() {
 //---------------------------------
 
 void calibration() {
-    GPIOA->BSRR = 0x200; // pA9 // for test
     comp_ext_disable(compN_);
     comp_set_data(compN_, 0);
     f[compN_] = 0;
@@ -241,7 +201,6 @@ void calibration() {
     }
     f[compN_] = 0;
     comp_ext_enable(compN_);
-    GPIOA->BSRR = 0x2000000; // pA9 // for test
 }
 //---------------------------------
 
