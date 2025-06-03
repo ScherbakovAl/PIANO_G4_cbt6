@@ -16,7 +16,7 @@ extern "C" {
     using uint = unsigned int;
     using cuint = const uint;
 
-    const int chipAdress = 4; // для NoteOff что-то придумать надо здесь!
+    const int chipAdress = 3; // для NoteOff что-то придумать надо здесь!
     const int allChipCount = 26;
     const uint8_t note = chipAdress * 7 + 25;
     // !!!  ***  !!!   подтяжки линий (в UART нужен UP для Tx у одного из g4)+(UP для линии прерываний)   !!!  ***  !!!
