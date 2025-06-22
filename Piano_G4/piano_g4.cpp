@@ -75,6 +75,25 @@ void g4() {
         //---------------------------------
     }
 
+
+	// TODO
+	// TODO
+	// TODO
+	// TODO
+	// TODO
+	// TODO
+
+	// TODO
+	// TODO	GPIO ANALOG MODE !!!!!!!!!!!! test and using !!!
+	// TODO
+
+	// TODO
+	// TODO
+	// TODO
+	// TODO
+	// TODO
+	// TODO
+
     while (1) {
         for (int i = 0; i < 7; ++i) {
 
