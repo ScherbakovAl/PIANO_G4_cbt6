@@ -75,7 +75,6 @@ void g4() {
         //---------------------------------
     }
 
-
 	// TODO
 	// TODO
 	// TODO
@@ -93,6 +92,46 @@ void g4() {
 	// TODO
 	// TODO
 	// TODO
+
+
+
+    // TODO
+	// TODO
+	// TODO
+	// TODO
+	// TODO
+	// TODO
+
+	// TODO
+	// TODO	BOOT ???? NRST ???? в каком состоянии должны быть?
+	// TODO
+
+	// TODO
+	// TODO G10 - input and pull UP ????
+	// TODO B8 - analog mode ????
+	// TODO
+	// TODO
+	// TODO
+
+    // TODO
+	// TODO
+	// TODO
+	// TODO
+	// TODO
+	// TODO
+
+	// TODO
+	// TODO	у 2-й и 4-й платы переделать пины с выводами 6 и 7 компараторов в ANALOG MODE  !!! ! ! !
+	// TODO
+
+	// TODO
+	// TODO 
+	// TODO 
+	// TODO
+	// TODO
+	// TODO
+
+
 
     while (1) {
         for (int i = 0; i < 7; ++i) {
@@ -533,9 +572,9 @@ void iffing(int a) {
 
 // SPI Send-Recive
 void SPI1_SendData(uint16_t data) {
-    while (!LL_SPI_IsActiveFlag_TXE(SPI1)) {};
-    LL_SPI_TransmitData16(SPI1, data);
-    while (LL_SPI_IsActiveFlag_BSY(SPI1)) {};
+    // while (!LL_SPI_IsActiveFlag_TXE(SPI1)) {};
+    // LL_SPI_TransmitData16(SPI1, data);
+    // while (LL_SPI_IsActiveFlag_BSY(SPI1)) {};
 }
 //---------------------------------
 
