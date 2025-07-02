@@ -13,6 +13,19 @@ std::deque<notes> dequeOn;
 // main
 void g4() {
     { // init
+
+
+
+        /**/
+        LL_TIM_EnableCounter(TIM1);
+        LL_TIM_CC_EnableChannel(TIM1, LL_TIM_CHANNEL_CH1);
+        LL_TIM_EnableAllOutputs(TIM1);
+        while (1) {};
+                /**/
+
+
+
+
         GPIOA->BSRR = 0x100; // pA8 // tim interrupter // чтобы включился счёт таймера с H7
         // TIM init
         LL_TIM_EnableCounter(TIM2);               // основной счётчик (100nS)
@@ -75,61 +88,61 @@ void g4() {
         //---------------------------------
     }
 
-	// TODO
-	// TODO
-	// TODO
-	// TODO
-	// TODO
-	// TODO
+    // TODO
+    // TODO
+    // TODO
+    // TODO
+    // TODO
+    // TODO
 
-	// TODO
-	// TODO	GPIO ANALOG MODE !!!!!!!!!!!! test and using !!!
-	// TODO
+    // TODO
+    // TODO	GPIO ANALOG MODE !!!!!!!!!!!! test and using !!!
+    // TODO
 
-	// TODO
-	// TODO
-	// TODO
-	// TODO
-	// TODO
-	// TODO
+    // TODO
+    // TODO
+    // TODO
+    // TODO
+    // TODO
+    // TODO
 
 
 
     // TODO
-	// TODO
-	// TODO
-	// TODO
-	// TODO
-	// TODO
-
-	// TODO
-	// TODO	BOOT ???? NRST ???? в каком состоянии должны быть?
-	// TODO
-
-	// TODO
-	// TODO G10 - input and pull UP ????
-	// TODO B8 - analog mode ????
-	// TODO
-	// TODO
-	// TODO
+    // TODO
+    // TODO
+    // TODO
+    // TODO
+    // TODO
 
     // TODO
-	// TODO
-	// TODO
-	// TODO
-	// TODO
-	// TODO
+    // TODO	BOOT ???? NRST ???? в каком состоянии должны быть?
+    // TODO
 
-	// TODO
-	// TODO	у 2-й и 4-й платы переделать пины с выводами 6 и 7 компараторов в ANALOG MODE  !!! ! ! !
-	// TODO
+    // TODO
+    // TODO G10 - input and pull UP ????
+    // TODO B8 - analog mode ????
+    // TODO
+    // TODO
+    // TODO
 
-	// TODO
-	// TODO 
-	// TODO 
-	// TODO
-	// TODO
-	// TODO
+    // TODO
+    // TODO
+    // TODO
+    // TODO
+    // TODO
+    // TODO
+
+    // TODO
+    // TODO	у 2-й и 4-й платы переделать пины с выводами 6 и 7 компараторов в ANALOG MODE  !!! ! ! !
+    // TODO
+
+    // TODO
+    // TODO 
+    // TODO 
+    // TODO
+    // TODO
+    // TODO
 
 
 

@@ -75,8 +75,6 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define TIM_trigg_Pin LL_GPIO_PIN_8
-#define TIM_trigg_GPIO_Port GPIOA
 #define TIM_CLK_Pin LL_GPIO_PIN_6
 #define TIM_CLK_GPIO_Port GPIOB
 #define GPIO_Analog_Pin LL_GPIO_PIN_8
