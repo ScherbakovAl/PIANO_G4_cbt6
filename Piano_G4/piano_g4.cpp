@@ -13,7 +13,8 @@ std::deque<notes> dequeOn;
 // main
 void g4() {
     { // init
-        GPIOA->BSRR = 0x100; // pA8 // tim interrupter // чтобы включился счёт таймера с H7
+        // GPIOA->BSRR = 0x100; // pA8 // tim interrupter // чтобы включился счёт таймера с H7
+        GPIOB->BSRR = 0x80; // pB7
         // TIM init
         LL_TIM_EnableCounter(TIM2);               // основной счётчик (100nS)
         LL_TIM_EnableCounter(TIM5);               // доп счётчик (100uS)
@@ -24,22 +25,22 @@ void g4() {
         //---------------------------------
 
         // UART init
-        LL_USART_DisableDirectionTx(USART1); // один или несколько MCU должны быть подтянуты к pull_UP ! // надо ли? проверить..
-        LL_USART_Disable(USART1);            // // надо ли? проверить..
-        LL_USART_ConfigNodeAddress(USART1, LL_USART_ADDRESS_DETECT_7B, chipAdress);
-        LL_USART_Enable(USART1);
-        LL_USART_DisableDirectionTx(USART1);   // один или несколько MCU должны быть подтянуты к pull_UP !
-        LL_USART_ClearFlag_TC(USART1);         // чтобы при включении не срабатывало прерывание
-        LL_USART_EnableIT_RXNE_RXFNE(USART1);  // включение прерывания по приему данных
-        LL_USART_EnableMuteMode(USART1);       // включение MuteMode
-        LL_USART_RequestEnterMuteMode(USART1); // ставит USART в MuteMode и сбрасывает флаг RWU.
-        LL_USART_EnableDMAReq_TX(USART1);      // подсоединяет DMA к UART
-        LL_USART_EnableIT_TC(USART1);          // прерывание окончания передачи
+        LL_USART_DisableDirectionTx(USART2); // один или несколько MCU должны быть подтянуты к pull_UP ! // надо ли? проверить..
+        LL_USART_Disable(USART2);            // // надо ли? проверить..
+        LL_USART_ConfigNodeAddress(USART2, LL_USART_ADDRESS_DETECT_7B, chipAdress);
+        LL_USART_Enable(USART2);
+        LL_USART_DisableDirectionTx(USART2);   // один или несколько MCU должны быть подтянуты к pull_UP !
+        LL_USART_ClearFlag_TC(USART2);         // чтобы при включении не срабатывало прерывание
+        LL_USART_EnableIT_RXNE_RXFNE(USART2);  // включение прерывания по приему данных
+        LL_USART_EnableMuteMode(USART2);       // включение MuteMode
+        LL_USART_RequestEnterMuteMode(USART2); // ставит USART в MuteMode и сбрасывает флаг RWU.
+        LL_USART_EnableDMAReq_TX(USART2);      // подсоединяет DMA к UART
+        LL_USART_EnableIT_TC(USART2);          // прерывание окончания передачи
         //---------------------------------
 
         // DMA TX
         LL_DMA_DisableChannel(DMA1, LL_DMA_CHANNEL_1);
-        LL_DMA_SetPeriphAddress(DMA1, LL_DMA_CHANNEL_1, (uint32_t) & (USART1->TDR));
+        LL_DMA_SetPeriphAddress(DMA1, LL_DMA_CHANNEL_1, (uint32_t) & (USART2->TDR));
         LL_DMA_SetMemoryAddress(DMA1, LL_DMA_CHANNEL_1, (uint32_t)tx_data);
         LL_DMA_SetDataLength(DMA1, LL_DMA_CHANNEL_1, tx_dataLength);
         //---------------------------------
@@ -170,7 +171,7 @@ void g4() {
             tx_data[2] = x.b;
             LL_DMA_DisableChannel(DMA1, LL_DMA_CHANNEL_1);
             LL_DMA_SetDataLength(DMA1, LL_DMA_CHANNEL_1, tx_dataLength);
-            LL_USART_ClearFlag_TC(USART1);
+            LL_USART_ClearFlag_TC(USART2);
             LL_TIM_ClearFlag_CC3(TIM8);
             LL_TIM_EnableIT_CC3(TIM8);
             dequeOn.pop_front();
@@ -180,11 +181,11 @@ void g4() {
 }
 
 void communication() {
-    USART1_Receive();
+    USART2_Receive();
 
     if (rx_settings[0] == command::sync_timer) {
         TIM8->CNT = 0;
-        USART1_Send(compN_, dot_, 0);
+        USART2_Send(compN_, dot_, 0);
     }
 
     if (rx_settings[0] == command::cal) {
@@ -192,53 +193,53 @@ void communication() {
     }
 
     if (rx_settings[0] == command::read_comp_value) {
-        USART1_Send(compN_, dot_, comp[compN_][dot_]);
+        USART2_Send(compN_, dot_, comp[compN_][dot_]);
     }
 
     if (rx_settings[0] == command::set_comp_value) {
         comp[compN_][dot_] = convert8x2to16(a_, b_);
-        USART1_Send(compN_, dot_, comp[compN_][dot_]);
+        USART2_Send(compN_, dot_, comp[compN_][dot_]);
     }
     // if (rx_settings[0] == command::set_div_value) { // TODO
     //     получить значени div и применить его
     //     divisible = ...;
     //     сконвертировать и отправить обратно это значение для проверки
-    //     USART1_Send(a, b, cd);
+    //     USART2_Send(a, b, cd);
     // }
 }
 
 // UART Send-Recive
-void USART1_Send(uint8_t compN, uint8_t dot, int value) {
-    LL_USART_EnableDirectionTx(USART1); // отправлять только при ВЫКЛюченных остальных слэйв-трансляторах.. иначе замыкание
+void USART2_Send(uint8_t compN, uint8_t dot, int value) {
+    LL_USART_EnableDirectionTx(USART2); // отправлять только при ВЫКЛюченных остальных слэйв-трансляторах.. иначе замыкание
     tx_settings[1] = { compN };
     tx_settings[2] = { dot };
     conv16to8x2 c;
     c = convert16to8x2(value);
     tx_settings[3] = c.a;
     tx_settings[4] = c.b;
-    while (!LL_USART_IsActiveFlag_TXE(USART1)) {}
+    while (!LL_USART_IsActiveFlag_TXE(USART2)) {}
     for (int i = 0; i < tx_settings_length; i++) {
-        LL_USART_TransmitData9(USART1, tx_settings[i]);
-        while (!LL_USART_IsActiveFlag_TXE(USART1)) {}
+        LL_USART_TransmitData9(USART2, tx_settings[i]);
+        while (!LL_USART_IsActiveFlag_TXE(USART2)) {}
     }
-    while (!LL_USART_IsActiveFlag_TC(USART1)) {}
-    LL_USART_DisableDirectionTx(USART1);
-    LL_USART_ClearFlag_TC(USART1);
+    while (!LL_USART_IsActiveFlag_TC(USART2)) {}
+    LL_USART_DisableDirectionTx(USART2);
+    LL_USART_ClearFlag_TC(USART2);
 }
 
-void USART1_Receive() {
-    while (!LL_USART_IsActiveFlag_RXNE(USART1)) {}
-    rx_settings[0] = LL_USART_ReceiveData9(USART1);
+void USART2_Receive() {
+    while (!LL_USART_IsActiveFlag_RXNE(USART2)) {}
+    rx_settings[0] = LL_USART_ReceiveData9(USART2);
     for (int i = 0; i < rx_settings_length; i++) {
-        while (!LL_USART_IsActiveFlag_RXNE(USART1)) {}
-        rx_settings[i] = LL_USART_ReceiveData9(USART1);
+        while (!LL_USART_IsActiveFlag_RXNE(USART2)) {}
+        rx_settings[i] = LL_USART_ReceiveData9(USART2);
     }
     compN_ = rx_settings[1];
     dot_ = rx_settings[2];
     a_ = rx_settings[3];
     b_ = rx_settings[4];
-    LL_USART_RequestRxDataFlush(USART1);
-    LL_USART_RequestEnterMuteMode(USART1);
+    LL_USART_RequestRxDataFlush(USART2);
+    LL_USART_RequestEnterMuteMode(USART2);
 }
 //---------------------------------
 
@@ -249,11 +250,11 @@ void calibration() {
     for (int a = 0; a < 4095; ++a) {
         comp_set_data(compN_, a);
         if (LL_COMP_ReadOutputLevel(comp_def(compN_)) == LL_COMP_OUTPUT_LEVEL_LOW) {
-            USART1_Send(compN_, dot_, a);
+            USART2_Send(compN_, dot_, a);
             break;
         }
         if (a > 4090) {
-            USART1_Send(compN_, dot_, 0);
+            USART2_Send(compN_, dot_, 0);
             break;
         }
     }
@@ -268,28 +269,32 @@ void TIM8_UP_IRQ() { // для теста (начало счёта таймер�
 }
 
 void TIM8_CC_IRQ() { // это прерывание срабатывает от TIM8 по номеру контроллера
-    GPIOA->BSRR = 0x1000000; // pA8 // tim interrupter
+    // GPIOA->BSRR = 0x1000000; // pA8 // tim interrupter
+    GPIOB->BSRR = 0x800000; //pB7
     LL_TIM_ClearFlag_CC3(TIM8);
-    LL_USART_EnableDirectionTx(USART1); // отправлять только при ВЫКЛюченных остальных слэйв-трансляторах.. иначе замыкание
+    LL_USART_EnableDirectionTx(USART2); // отправлять только при ВЫКЛюченных остальных слэйв-трансляторах.. иначе замыкание
     LL_DMA_EnableChannel(DMA1, LL_DMA_CHANNEL_1);
 }
 //---------------------------------
 
 // UART IQR Handler
-void USART1_IRQ() {
-    if (LL_USART_IsActiveFlag_TC(USART1)) {  // здесь прерывание, если завершена передача данных
-        LL_USART_DisableDirectionTx(USART1); // один или несколько должны быть подтянуты к pull_UP !
-        LL_USART_ClearFlag_TC(USART1);       // идёт вслед за DisableDirectionTx, иначе прерывается ещё раз
+void USART2_IRQ() {
+    if (LL_USART_IsActiveFlag_TC(USART2)) {  // здесь прерывание, если завершена передача данных
+        LL_USART_DisableDirectionTx(USART2); // один или несколько должны быть подтянуты к pull_UP !
+        LL_USART_ClearFlag_TC(USART2);       // идёт вслед за DisableDirectionTx, иначе прерывается ещё раз
         fl = 1;
         LL_TIM_DisableIT_CC3(TIM8);
-        GPIOA->BSRR = 0x100; // pA8 // tim interrupter
+        // GPIOA->BSRR = 0x100; // pA8 // tim interrupter
+        GPIOB->BSRR = 0x80; //pB7
     }
-    if (LL_USART_IsActiveFlag_RXNE_RXFNE(USART1)) { // здесь прерывание, если адрес UART совпал
-        GPIOA->BSRR = 0x1000000; // pA8 // tim interrupter
+    if (LL_USART_IsActiveFlag_RXNE_RXFNE(USART2)) { // здесь прерывание, если адрес UART совпал
+        // GPIOA->BSRR = 0x1000000; // pA8 // tim interrupter
+        GPIOB->BSRR = 0x800000; //pB7
         communication();
-        LL_USART_RequestRxDataFlush(USART1);   // сбрасывает RXNE флаг (или uint8_t data = LL_USART_ReceiveData8(USART1); сбрасывает)
-        LL_USART_RequestEnterMuteMode(USART1); // ставит USART в MuteMode и сбрасывает флаг RWU.
-        GPIOA->BSRR = 0x100; // pA8 // tim interrupter
+        LL_USART_RequestRxDataFlush(USART2);   // сбрасывает RXNE флаг (или uint8_t data = LL_USART_ReceiveData8(USART2); сбрасывает)
+        LL_USART_RequestEnterMuteMode(USART2); // ставит USART в MuteMode и сбрасывает флаг RWU.
+        // GPIOA->BSRR = 0x100; // pA8 // tim interrupter
+        GPIOB->BSRR = 0x80; //pB7
     }
 }
 //---------------------------------

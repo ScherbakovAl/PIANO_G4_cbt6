@@ -69,12 +69,12 @@ extern "C" {
     };
 
     void communication();
-    void USART1_Send(uint8_t compN, uint8_t dot, int value);
-    void USART1_Receive();
+    void USART2_Send(uint8_t compN, uint8_t dot, int value);
+    void USART2_Receive();
     void calibration();
     void TIM8_UP_IRQ();
     void TIM8_CC_IRQ();
-    void USART1_IRQ();
+    void USART2_IRQ();
     void pause(int p);
     int convert8x2to16(uint8_t a, uint8_t b);
     conv16to8x2 convert16to8x2(int a);
