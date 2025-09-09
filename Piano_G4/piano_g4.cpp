@@ -76,61 +76,61 @@ void g4() {
         //---------------------------------
     }
 
-	// TODO
-	// TODO
-	// TODO
-	// TODO
-	// TODO
-	// TODO
+    // TODO
+    // TODO
+    // TODO
+    // TODO
+    // TODO
+    // TODO
 
-	// TODO
-	// TODO	GPIO ANALOG MODE !!!!!!!!!!!! test and using !!!
-	// TODO
+    // TODO
+    // TODO	GPIO ANALOG MODE !!!!!!!!!!!! test and using !!!
+    // TODO
 
-	// TODO
-	// TODO
-	// TODO
-	// TODO
-	// TODO
-	// TODO
+    // TODO
+    // TODO
+    // TODO
+    // TODO
+    // TODO
+    // TODO
 
 
 
     // TODO
-	// TODO
-	// TODO
-	// TODO
-	// TODO
-	// TODO
-
-	// TODO
-	// TODO	BOOT ???? NRST ???? в каком состоянии должны быть?
-	// TODO
-
-	// TODO
-	// TODO G10 - input and pull UP ????
-	// TODO B8 - analog mode ????
-	// TODO
-	// TODO
-	// TODO
+    // TODO
+    // TODO
+    // TODO
+    // TODO
+    // TODO
 
     // TODO
-	// TODO
-	// TODO
-	// TODO
-	// TODO
-	// TODO
+    // TODO	BOOT ???? NRST ???? в каком состоянии должны быть?
+    // TODO
 
-	// TODO
-	// TODO	у 2-й и 4-й платы переделать пины с выводами 6 и 7 компараторов в ANALOG MODE  !!! ! ! !
-	// TODO
+    // TODO
+    // TODO G10 - input and pull UP ????
+    // TODO B8 - analog mode ????
+    // TODO
+    // TODO
+    // TODO
 
-	// TODO
-	// TODO 
-	// TODO 
-	// TODO
-	// TODO
-	// TODO
+    // TODO
+    // TODO
+    // TODO
+    // TODO
+    // TODO
+    // TODO
+
+    // TODO
+    // TODO	у 2-й и 4-й платы переделать пины с выводами 6 и 7 компараторов в ANALOG MODE  !!! ! ! !
+    // TODO
+
+    // TODO
+    // TODO 
+    // TODO 
+    // TODO
+    // TODO
+    // TODO
 
 
 
