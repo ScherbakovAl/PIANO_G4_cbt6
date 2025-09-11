@@ -4,5 +4,8 @@
     "chat.notifyWindowOnConfirmation": false,
     "telemetry.feedback.enabled": false,
     "C_Cpp.copilotHover": "disabled",
-    "telemetry.editStats.enabled": false
+    "telemetry.editStats.enabled": false,
+    "files.associations": {
+        "random": "cpp"
+    }
 }

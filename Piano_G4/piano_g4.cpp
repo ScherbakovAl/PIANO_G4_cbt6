@@ -8,19 +8,20 @@
 #include "piano_g4.hpp"
 
 #include "deque"
-std::deque<notes> dequeOn;
+std::deque<nt> dequeOn;
 
 // main
 void g4() {
-    { // init
-        // GPIOA->BSRR = 0x100; // pA8 // tim interrupter // чтобы включился счёт таймера с H7
-        GPIOB->BSRR = 0x80; // pB7
+    {
+        // init
+        GPIOB->BSRR = 0x80; // pB7 // tim interrupter // чтобы включился счёт таймера с H7
+
         // TIM init
         LL_TIM_EnableCounter(TIM2);               // основной счётчик (100nS)
         LL_TIM_EnableCounter(TIM5);               // доп счётчик (100uS)
         LL_TIM_SetAutoReload(TIM8, allChipCount); // TIM8 для связи
         LL_TIM_OC_SetCompareCH3(TIM8, chipAdress);
-        //	LL_TIM_EnableIT_UPDATE(TIM8); // это для теста
+        //	LL_TIM_EnableIT_UPDATE(TIM8); // это для теста // for test
         LL_TIM_EnableCounter(TIM8); // TIM8 для связи
         //---------------------------------
 
@@ -71,68 +72,17 @@ void g4() {
         LL_COMP_Enable(COMP7);
         //---------------------------------
 
-        // SPI
-        //	LL_SPI_Enable(SPI1); // pA5-sck pA7-mosi
-        //---------------------------------
     }
 
-    // TODO
-    // TODO
-    // TODO
-    // TODO
-    // TODO
-    // TODO
+    // можно для неполных сделать точку срабатывания высоко, выше 1000 и не будет компаратор срабатывать..
 
-    // TODO
-    // TODO	GPIO ANALOG MODE !!!!!!!!!!!! test and using !!!
-    // TODO
+    // 136Mhz - speed cheep
+    // TIM2 - presc = 12    - 100ns период
+    // TIM5 - presc = 13599 - 100us период
 
-    // TODO
-    // TODO
-    // TODO
-    // TODO
-    // TODO
-    // TODO
-
-
-
-    // TODO
-    // TODO
-    // TODO
-    // TODO
-    // TODO
-    // TODO
-
-    // TODO
-    // TODO	BOOT ???? NRST ???? в каком состоянии должны быть?
-    // TODO
-
-    // TODO
-    // TODO G10 - input and pull UP ????
-    // TODO B8 - analog mode ????
-    // TODO
-    // TODO
-    // TODO
-
-    // TODO
-    // TODO
-    // TODO
-    // TODO
-    // TODO
-    // TODO
-
-    // TODO
-    // TODO	у 2-й и 4-й платы переделать пины с выводами 6 и 7 компараторов в ANALOG MODE  !!! ! ! !
-    // TODO
-
-    // TODO
-    // TODO 
-    // TODO 
-    // TODO
-    // TODO
-    // TODO
-
-
+    if (chipAdress > 13) {
+        set_ALL_COMP_extVoltage_Up();
+    }
 
     while (1) {
         for (int i = 0; i < 7; ++i) {
@@ -144,7 +94,7 @@ void g4() {
                     f[i] = 2;
                     comp_ext_enable(i);
                 }
-                if (f[i] == 2 && TIM5->CNT - tim_off[i][0] > 300) {
+                if (f[i] == 2 && TIM5->CNT - tim_off[i][0] > 300) { // = 30ms
                     comp_ext_disable(i);
                     comp_set_data(i, comp[i][0]);
                     f[i] = 0;
@@ -153,11 +103,10 @@ void g4() {
                 if (f[i] == 3) {
                     tim_off[i][1] = TIM5->CNT;
                     f[i] = 4;
-                    notes n;
-                    n.set(i, tim[i][0], tim[i][1]);
+                    nt n{ (uint8_t)note + i, timeLength(tim[i][0], tim[i][1]) };
                     dequeOn.push_back(n);
                 }
-                if (f[i] == 4 && TIM5->CNT - tim_off[i][1] > 500) {
+                if (f[i] == 4 && TIM5->CNT - tim_off[i][1] > 500) { // = 50ms
                     comp_set_data(i, comp[i][0]);
                     f[i] = 0;
                     comp_ext_enable(i);
@@ -166,9 +115,12 @@ void g4() {
         }
         if (!dequeOn.empty() && fl) {
             auto x = dequeOn.front();
+            abcd a{conv32to8(x)};
             tx_data[0] = x.n;
-            tx_data[1] = x.a;
-            tx_data[2] = x.b;
+            tx_data[1] = a.a;
+            tx_data[2] = a.b;
+            tx_data[3] = a.c;
+            tx_data[4] = a.d;
             LL_DMA_DisableChannel(DMA1, LL_DMA_CHANNEL_1);
             LL_DMA_SetDataLength(DMA1, LL_DMA_CHANNEL_1, tx_dataLength);
             LL_USART_ClearFlag_TC(USART2);
@@ -200,13 +152,8 @@ void communication() {
         comp[compN_][dot_] = convert8x2to16(a_, b_);
         USART2_Send(compN_, dot_, comp[compN_][dot_]);
     }
-    // if (rx_settings[0] == command::set_div_value) { // TODO
-    //     получить значени div и применить его
-    //     divisible = ...;
-    //     сконвертировать и отправить обратно это значение для проверки
-    //     USART2_Send(a, b, cd);
-    // }
 }
+//---------------------------------
 
 // UART Send-Recive
 void USART2_Send(uint8_t compN, uint8_t dot, int value) {
@@ -246,6 +193,7 @@ void USART2_Receive() {
 void calibration() {
     comp_ext_disable(compN_);
     comp_set_data(compN_, 0);
+    setCOMP_extVoltage_Down(compN_);
     f[compN_] = 0;
     for (int a = 0; a < 4095; ++a) {
         comp_set_data(compN_, a);
@@ -259,6 +207,9 @@ void calibration() {
         }
     }
     f[compN_] = 0;
+    if (chipAdress > 13) {
+        setCOMP_extVoltage_Up(compN_);
+    }
     comp_ext_enable(compN_);
 }
 //---------------------------------
@@ -269,8 +220,7 @@ void TIM8_UP_IRQ() { // для теста (начало счёта таймер�
 }
 
 void TIM8_CC_IRQ() { // это прерывание срабатывает от TIM8 по номеру контроллера
-    // GPIOA->BSRR = 0x1000000; // pA8 // tim interrupter
-    GPIOB->BSRR = 0x800000; //pB7
+    GPIOB->BSRR = 0x800000; //pB7 // tim interrupter
     LL_TIM_ClearFlag_CC3(TIM8);
     LL_USART_EnableDirectionTx(USART2); // отправлять только при ВЫКЛюченных остальных слэйв-трансляторах.. иначе замыкание
     LL_DMA_EnableChannel(DMA1, LL_DMA_CHANNEL_1);
@@ -284,44 +234,33 @@ void USART2_IRQ() {
         LL_USART_ClearFlag_TC(USART2);       // идёт вслед за DisableDirectionTx, иначе прерывается ещё раз
         fl = 1;
         LL_TIM_DisableIT_CC3(TIM8);
-        // GPIOA->BSRR = 0x100; // pA8 // tim interrupter
-        GPIOB->BSRR = 0x80; //pB7
+        GPIOB->BSRR = 0x80; //pB7 // tim interrupter
     }
     if (LL_USART_IsActiveFlag_RXNE_RXFNE(USART2)) { // здесь прерывание, если адрес UART совпал
-        // GPIOA->BSRR = 0x1000000; // pA8 // tim interrupter
-        GPIOB->BSRR = 0x800000; //pB7
+        GPIOB->BSRR = 0x800000; //pB7 // tim interrupter
         communication();
         LL_USART_RequestRxDataFlush(USART2);   // сбрасывает RXNE флаг (или uint8_t data = LL_USART_ReceiveData8(USART2); сбрасывает)
         LL_USART_RequestEnterMuteMode(USART2); // ставит USART в MuteMode и сбрасывает флаг RWU.
-        // GPIOA->BSRR = 0x100; // pA8 // tim interrupter
-        GPIOB->BSRR = 0x80; //pB7
+        GPIOB->BSRR = 0x80; //pB7 // tim interrupter
     }
-}
-//---------------------------------
-
-void notes::set(uint8_t nn, uint32_t t1, uint32_t t2) {
-    uint32_t tOut;
-    if (t1 > t2) {
-        tOut = 4'294'967'295 - t1 + t2 + 1;
-    }
-    else {
-        tOut = t2 - t1;
-    }
-    cuint midi_speed = divisible / tOut;
-    cuint midi_hi = midi_speed / maxMidi;
-    cuint midi_lo = midi_speed - midi_hi * maxMidi;
-
-    n = (uint8_t)note + nn;
-    a = (uint8_t)midi_hi;
-    b = (uint8_t)midi_lo;
 }
 //---------------------------------
 
 // (100ns)
-void pause(int p) {
+void pause(uint p) {
     TIM2->CNT = 0;
-    while (TIM2->CNT < p) {
+    while (TIM2->CNT < p) {}
+}
+
+uint32_t timeLength(uint t1, uint t2) {
+    uint32_t tOut;
+    if (t1 > t2) {
+        tOut = 4'294'967'296 - t1 + t2;
     }
+    else {
+        tOut = t2 - t1;
+    }
+    return tOut;
 }
 
 int convert8x2to16(uint8_t a, uint8_t b) {
@@ -335,10 +274,18 @@ conv16to8x2 convert16to8x2(int a) {
     return r;
 }
 
-// void conv32to8() {} // реализовать
-// void conv8to32() {} // реализовать
+abcd conv32to8(nt x) {
+    abcd a;
+    uint32_t u = x.timelegth;
+    a.a = (u & 0xff << 24) >> 24;
+    a.b = (u & 0xff << 16) >> 16;
+    a.c = (u & 0xff << 8) >> 8;
+    a.d = u & 0xff;
+    return a;
+}
 //---------------------------------
 
+// COMPs controls
 void setCOMP_extVoltage_Up(int compN) {
     switch (compN) {
     case 0:
@@ -433,6 +380,18 @@ void setCOMP_extVoltage_Down(int compN) {
     }
 }
 
+void set_ALL_COMP_extVoltage_Up() {
+    for (int i = 0; i < 7; ++i) {
+        setCOMP_extVoltage_Up(i);
+    }
+}
+
+void set_ALL_COMP_extVoltage_Down() {
+    for (int i = 0; i < 7; ++i) {
+        setCOMP_extVoltage_Down(i);
+    }
+}
+
 void comp_ext_enable(int compN) {
     switch (compN) {
     case 0:
@@ -518,7 +477,34 @@ void comp_set_data(int compN, int data) {
     }
 }
 
-// COMP IQR Handler
+COMP_TypeDef* comp_def(const int i) {
+    switch (i) {
+    case 0:
+        return COMP1;
+        break;
+    case 1:
+        return COMP2;
+        break;
+    case 2:
+        return COMP3;
+        break;
+    case 3:
+        return COMP4;
+        break;
+    case 4:
+        return COMP5;
+        break;
+    case 5:
+        return COMP6;
+        break;
+    case 6:
+        return COMP7;
+        break;
+    }
+}
+//---------------------------------
+
+// COMPs IQR Handlers
 void COMP1_2_3_IRQ() { // line 21, 22, 29
     if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_21)) {
         LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_21);
@@ -574,44 +560,3 @@ void iffing(int a) {
     }
 }
 //---------------------------------
-
-// SPI Send-Recive
-void SPI1_SendData(uint16_t data) {
-    // while (!LL_SPI_IsActiveFlag_TXE(SPI1)) {};
-    // LL_SPI_TransmitData16(SPI1, data);
-    // while (LL_SPI_IsActiveFlag_BSY(SPI1)) {};
-}
-//---------------------------------
-
-void debugg() { // DEBUG
-    if (TIM2->CNT > 1000000) {
-        TIM2->CNT = 0;
-        LL_GPIO_TogglePin(GPIOC, LL_GPIO_PIN_6);
-    }
-}
-
-COMP_TypeDef* comp_def(const int i) {
-    switch (i) {
-    case 0:
-        return COMP1;
-        break;
-    case 1:
-        return COMP2;
-        break;
-    case 2:
-        return COMP3;
-        break;
-    case 3:
-        return COMP4;
-        break;
-    case 4:
-        return COMP5;
-        break;
-    case 5:
-        return COMP6;
-        break;
-    case 6:
-        return COMP7;
-        break;
-    }
-}

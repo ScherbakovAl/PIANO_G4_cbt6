@@ -16,13 +16,13 @@ extern "C" {
     using uint = unsigned int;
     using cuint = const uint;
 
-    const int chipAdress = 3; // для NoteOff что-то придумать надо здесь! 4-5-6-on, 18-19-20-off
+    const int chipAdress = 3; // для NoteOff что-то придумать надо здесь! 1-13-on, 14-26-off
     const int allChipCount = 26;
     const uint8_t note = chipAdress * 7 + 25;
     // !!!  ***  !!!   подтяжки линий (в UART нужен UP для Tx у одного из g4)+(UP для линии прерываний)   !!!  ***  !!!
 
     // data
-    uint8_t tx_data[3] = {};
+    uint8_t tx_data[5] = { };
     const int tx_dataLength = sizeof(tx_data);
 
     // settings
@@ -35,24 +35,21 @@ extern "C" {
     uint8_t a_ = 0;
     uint8_t b_ = 0;
 
-    volatile uint32_t tim[7][2] = {};
-    uint32_t tim_off[7][2] = {};
+    volatile uint32_t tim[7][2] = { };
+    uint32_t tim_off[7][2] = { };
     int comp[7][2] = { {3500, 1000}, {3500, 1000}, {3500, 1000}, {3500, 1000}, {3500, 1000}, {3500, 1000}, {3500, 1000} };
     int def[2] = { 3500, 1000 };
     volatile unsigned int f[7] = { 0 };
     int fl = 1;
-    uint divisible = 100'000'000; // 8 200 000
-    const unsigned int maxMidi = 127;
 
     enum command {
         sync_timer = 1,
         cal,
         read_comp_value,
         set_comp_value,
-        //set_div_value, // реализовать // TODO
-        buff_to_flash,         //
-        flash_to_buff,         //
-        read_comp_value_flash, //
+        buff_to_flash,
+        flash_to_buff,
+        read_comp_value_flash,
     };
 
     struct conv16to8x2 {
@@ -60,12 +57,16 @@ extern "C" {
         uint8_t b = 0;
     };
 
-    class notes {
-    public:
-        void set(uint8_t nn, uint32_t t1, uint32_t t2);
+    struct nt {
         uint8_t n = 0;
+        uint32_t timelegth = 0;
+    };
+
+    struct abcd {
         uint8_t a = 0;
         uint8_t b = 0;
+        uint8_t c = 0;
+        uint8_t d = 0;
     };
 
     void communication();
@@ -75,13 +76,15 @@ extern "C" {
     void TIM8_UP_IRQ();
     void TIM8_CC_IRQ();
     void USART2_IRQ();
-    void pause(int p);
+    uint32_t timeLength(uint t1, uint t2);
+    void pause(uint p);
     int convert8x2to16(uint8_t a, uint8_t b);
     conv16to8x2 convert16to8x2(int a);
-    // void conv32to8(); // реализовать // TODO
-    // void conv8to32(); // реализовать // TODO
+    abcd conv32to8(nt x);
     void setCOMP_extVoltage_Up(int compN);
     void setCOMP_extVoltage_Down(int compN);
+    void set_ALL_COMP_extVoltage_Up();
+    void set_ALL_COMP_extVoltage_Down();
     void comp_ext_enable(int compN);
     void comp_ext_disable(int compN);
     void comp_set_data(int compN, int dot);
@@ -89,9 +92,7 @@ extern "C" {
     void COMP4_5_6_IRQ();
     void COMP7_IRQ();
     void iffing(int a);
-    void SPI1_SendData(uint16_t data);
     COMP_TypeDef* comp_def(const int i);
-    void debugg();
 
 }
 #endif // extern "C"
