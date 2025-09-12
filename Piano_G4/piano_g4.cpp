@@ -255,7 +255,8 @@ void pause(uint p) {
 uint32_t timeLength(uint t1, uint t2) {
     uint32_t tOut;
     if (t1 > t2) {
-        tOut = 4'294'967'296 - t1 + t2;
+        tOut = 4'294'967'295 - t1 + t2;
+        ++tOut;
     }
     else {
         tOut = t2 - t1;
