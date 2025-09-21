@@ -18,11 +18,11 @@ void g4() {
 
         // TIM init
         LL_TIM_EnableCounter(TIM2);               // основной счётчик (100nS)
-        LL_TIM_EnableCounter(TIM5);               // доп счётчик (100uS)
-        LL_TIM_SetAutoReload(TIM8, allChipCount); // TIM8 для связи
+        LL_TIM_EnableCounter(TIM5);               // доп счётчик (p100uS)
+        LL_TIM_SetAutoReload(TIM8, allChipCount); // PWM - tim clk
         LL_TIM_OC_SetCompareCH3(TIM8, chipAdress);
         //	LL_TIM_EnableIT_UPDATE(TIM8); // это для теста // for test
-        LL_TIM_EnableCounter(TIM8); // TIM8 для связи
+        LL_TIM_EnableCounter(TIM8); // PWM - tim clk
         //---------------------------------
 
         // UART init
@@ -81,20 +81,27 @@ void g4() {
     // TIM5 - presc = 13599 - 100us период
 
     if (chipAdress > 13) {
-        set_ALL_COMP_extVoltage_Up();
+        set_ALL_COMP_extVoltage_Up(); // ship OFF
+        windowReTRigger1 = 500; // 50ms // TIM5 (p100us)
+        windowReTRigger2 = 1000; // 100ms // TIM5 (p100us)
+    }
+    else { // ship ON
+        windowReTRigger1 = 300; // = 30ms // TIM5 (p100us)
+        windowReTRigger2 = 500; // = 50ms // TIM5 (p100us)
     }
 
-    while (1) {
-        for (int i = 0; i < 7; ++i) {
+    while (1) { // TODO добавить проверку на длинну при переполнении таймера с помощью функции timeLength !!!! 
+        // TODO !!!!
+        for (uint8_t i = 0; i < 7; ++i) {
 
             if (f[i] != 0) {
                 if (f[i] == 1) {
-                    tim_off[i][0] = TIM5->CNT;
+                    tim_off[i][0] = TIM5->CNT; // TIM5 (p100us)
                     comp_set_data(i, comp[i][1]);
                     f[i] = 2;
                     comp_ext_enable(i);
                 }
-                if (f[i] == 2 && TIM5->CNT - tim_off[i][0] > 300) { // = 30ms
+                if (f[i] == 2 && TIM5->CNT - tim_off[i][0] > windowReTRigger1) {
                     comp_ext_disable(i);
                     comp_set_data(i, comp[i][0]);
                     f[i] = 0;
@@ -106,7 +113,7 @@ void g4() {
                     nt n{ (uint8_t)note + i, timeLength(tim[i][0], tim[i][1]) };
                     dequeOn.push_back(n);
                 }
-                if (f[i] == 4 && TIM5->CNT - tim_off[i][1] > 500) { // = 50ms
+                if (f[i] == 4 && TIM5->CNT - tim_off[i][1] > windowReTRigger2) {
                     comp_set_data(i, comp[i][0]);
                     f[i] = 0;
                     comp_ext_enable(i);
@@ -115,7 +122,7 @@ void g4() {
         }
         if (!dequeOn.empty() && fl) {
             auto x = dequeOn.front();
-            abcd a{conv32to8(x)};
+            abcd a{ conv32to8(x) };
             tx_data[0] = x.n;
             tx_data[1] = a.a;
             tx_data[2] = a.b;
@@ -124,8 +131,8 @@ void g4() {
             LL_DMA_DisableChannel(DMA1, LL_DMA_CHANNEL_1);
             LL_DMA_SetDataLength(DMA1, LL_DMA_CHANNEL_1, tx_dataLength);
             LL_USART_ClearFlag_TC(USART2);
-            LL_TIM_ClearFlag_CC3(TIM8);
-            LL_TIM_EnableIT_CC3(TIM8);
+            LL_TIM_ClearFlag_CC3(TIM8); // PWM - tim clk
+            LL_TIM_EnableIT_CC3(TIM8);  // PWM - tim clk
             dequeOn.pop_front();
             fl = 0;
         }
@@ -136,7 +143,7 @@ void communication() {
     USART2_Receive();
 
     if (rx_settings[0] == command::sync_timer) {
-        TIM8->CNT = 0;
+        TIM8->CNT = 0;  // PWM - tim clk
         USART2_Send(compN_, dot_, 0);
     }
 
@@ -216,12 +223,12 @@ void calibration() {
 
 // TIM IQR Handler
 void TIM8_UP_IRQ() { // для теста (начало счёта таймера)  // for test
-    LL_TIM_ClearFlag_UPDATE(TIM8);
+    LL_TIM_ClearFlag_UPDATE(TIM8);  // PWM - tim clk
 }
 
 void TIM8_CC_IRQ() { // это прерывание срабатывает от TIM8 по номеру контроллера
     GPIOB->BSRR = 0x800000; //pB7 // tim interrupter
-    LL_TIM_ClearFlag_CC3(TIM8);
+    LL_TIM_ClearFlag_CC3(TIM8);  // PWM - tim clk
     LL_USART_EnableDirectionTx(USART2); // отправлять только при ВЫКЛюченных остальных слэйв-трансляторах.. иначе замыкание
     LL_DMA_EnableChannel(DMA1, LL_DMA_CHANNEL_1);
 }
@@ -233,7 +240,7 @@ void USART2_IRQ() {
         LL_USART_DisableDirectionTx(USART2); // один или несколько должны быть подтянуты к pull_UP !
         LL_USART_ClearFlag_TC(USART2);       // идёт вслед за DisableDirectionTx, иначе прерывается ещё раз
         fl = 1;
-        LL_TIM_DisableIT_CC3(TIM8);
+        LL_TIM_DisableIT_CC3(TIM8);  // PWM - tim clk
         GPIOB->BSRR = 0x80; //pB7 // tim interrupter
     }
     if (LL_USART_IsActiveFlag_RXNE_RXFNE(USART2)) { // здесь прерывание, если адрес UART совпал
@@ -255,8 +262,7 @@ void pause(uint p) {
 uint32_t timeLength(uint t1, uint t2) {
     uint32_t tOut;
     if (t1 > t2) {
-        tOut = 4'294'967'295 - t1 + t2;
-        ++tOut;
+        tOut = (4'294'967'295 - t1) + t2 + 1;
     }
     else {
         tOut = t2 - t1;

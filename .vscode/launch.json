@@ -44,7 +44,7 @@
             "servertype": "stlink",
             "device": "STM32G474CBTx", //MCU used
             "interface": "swd",
-            "serialNumber": "7400410007000059334D524E", // blue   //Set ST-Link ID if you use multiple at the same time 
+            "serialNumber": "7400410007000059334D524E", // blue stmG4
             "runToEntryPoint": "main",
             "svdFile": "${config:STM32VSCodeExtension.cubeCLT.path}/STMicroelectronics_CMSIS_SVD/STM32G474.svd",
             "v1": false, //Change it depending on ST Link version

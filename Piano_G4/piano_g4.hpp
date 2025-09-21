@@ -16,9 +16,9 @@ extern "C" {
     using uint = unsigned int;
     using cuint = const uint;
 
-    const int chipAdress = 3; // для NoteOff что-то придумать надо здесь! 1-13-on, 14-26-off
-    const int allChipCount = 26;
-    const uint8_t note = chipAdress * 7 + 25;
+    const int chipAdress = 23; // для NoteOff что-то придумать надо здесь! 1-13-on, 14-26-off
+    const int allChipCount = 23; // до этого значения считает таймер
+    const uint8_t note = chipAdress * 7;
     // !!!  ***  !!!   подтяжки линий (в UART нужен UP для Tx у одного из g4)+(UP для линии прерываний)   !!!  ***  !!!
 
     // data
@@ -35,11 +35,14 @@ extern "C" {
     uint8_t a_ = 0;
     uint8_t b_ = 0;
 
+    uint32_t windowReTRigger1 = 0;
+    uint32_t windowReTRigger2 = 0;
+
     volatile uint32_t tim[7][2] = { };
     uint32_t tim_off[7][2] = { };
     int comp[7][2] = { {3500, 1000}, {3500, 1000}, {3500, 1000}, {3500, 1000}, {3500, 1000}, {3500, 1000}, {3500, 1000} };
     int def[2] = { 3500, 1000 };
-    volatile unsigned int f[7] = { 0 };
+    volatile uint8_t f[7] = { 0 };
     int fl = 1;
 
     enum command {
