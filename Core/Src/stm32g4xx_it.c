@@ -244,7 +244,7 @@ void USART2_IRQHandler(void)
 void TIM8_UP_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM8_UP_IRQn 0 */
-  TIM8_UP_IRQ();
+  // TIM8_UP_IRQ();
   /* USER CODE END TIM8_UP_IRQn 0 */
   /* USER CODE BEGIN TIM8_UP_IRQn 1 */
 
