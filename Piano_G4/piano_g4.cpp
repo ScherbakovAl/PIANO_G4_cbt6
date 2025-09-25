@@ -145,37 +145,38 @@ void resetData() {
 
 void communication() {
     USART2_Receive();
-    resetData(); // TODO добавить сброс и очистку буфера пойманных нот после коммуникации..
 
     if (rx_settings[0] == command::sync_timer) {
         TIM8->CNT = 0;  // PWM - tim clk
         USART2_Send(compN_, dot_, 0);
     }
-
+    
     if (rx_settings[0] == command::cal) {
         calibration();
     }
-
+    
     if (rx_settings[0] == command::read_comp_value) {
         USART2_Send(compN_, dot_, comp[compN_][dot_]);
     }
-
+    
     if (rx_settings[0] == command::set_comp_value) {
         comp[compN_][dot_] = convert8x2to16(a_, b_);
         USART2_Send(compN_, dot_, comp[compN_][dot_]);
     }
+
+    resetData();
 }
 //---------------------------------
 
 // UART Send-Recive
 void USART2_Send(uint8_t compN, uint8_t dot, int value) {
-    tx_settings[1] = { compN };
-    tx_settings[2] = { dot };
+    LL_USART_EnableDirectionTx(USART2); // отправлять только при ВЫКЛюченных остальных слэйв-трансляторах.. иначе замыкание
     conv16to8x2 c;
     c = convert16to8x2(value);
+    tx_settings[1] = { compN };
+    tx_settings[2] = { dot };
     tx_settings[3] = c.a;
     tx_settings[4] = c.b;
-    LL_USART_EnableDirectionTx(USART2); // отправлять только при ВЫКЛюченных остальных слэйв-трансляторах.. иначе замыкание
     while (!LL_USART_IsActiveFlag_TXE(USART2)) {} // for test add ++test_counter;
     for (int i = 0; i < tx_settings_length; i++) {
         LL_USART_TransmitData9(USART2, tx_settings[i]);
@@ -279,7 +280,7 @@ int convert8x2to16(uint8_t a, uint8_t b) {
     return a << 8 | b;
 }
 
-conv16to8x2 convert16to8x2(int a) {
+conv16to8x2 convert16to8x2(int a) { // TODO AI - Проблема: Неправильный порядок операций. Должно быть r.a = (a & (0xff << 8)) >> 8; или r.a = (a >> 8) & 0xff;
     conv16to8x2 r;
     r.a = (a & 0xff << 8) >> 8;
     r.b = a & 0xff;

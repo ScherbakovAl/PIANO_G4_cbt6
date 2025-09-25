@@ -44,7 +44,7 @@ extern "C" {
     int def_on[2] = { 2800, 1200 }; // TODO для noteOFF сдесь сделать правильные значения для запуска
     int def_off[2] = { 2300, 2600 };
     volatile uint8_t f[7] = { 0 };
-    int fl = 1;
+    volatile int fl = 1; // TODO надо ли volatile здесь?
 
     enum command {
         sync_timer = 1,
