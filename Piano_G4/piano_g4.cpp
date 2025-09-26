@@ -88,8 +88,9 @@ void g4() {
     }
 
     while (1) {
+        // LL_USART_EnableDirectionTx(USART2); // for test // DEBUG
         for (uint8_t i = 0; i < 7; ++i) {
-
+            // if (i == 3)LL_USART_DisableDirectionTx(USART2); // for test // DEBUG
             if (f[i] != 0) {
                 if (f[i] == 1) {
                     tim_off[i][0] = TIM5->CNT; // TIM5 (p100us)
@@ -116,6 +117,7 @@ void g4() {
                 }
             }
         }
+
         if (!dequeOn.empty() && fl) {
             nt x = dequeOn.front();
             abcd a{ conv32to8(x) };
@@ -150,15 +152,15 @@ void communication() {
         TIM8->CNT = 0;  // PWM - tim clk
         USART2_Send(compN_, dot_, 0);
     }
-    
+
     if (rx_settings[0] == command::cal) {
         calibration();
     }
-    
+
     if (rx_settings[0] == command::read_comp_value) {
         USART2_Send(compN_, dot_, comp[compN_][dot_]);
     }
-    
+
     if (rx_settings[0] == command::set_comp_value) {
         comp[compN_][dot_] = convert8x2to16(a_, b_);
         USART2_Send(compN_, dot_, comp[compN_][dot_]);
@@ -223,6 +225,7 @@ void calibration() {
     if (chipAdress > 13) {
         setCOMP_extVoltage_Up(compN_);
     }
+    comp_set_data(compN_, comp[compN_][0]);
     comp_ext_enable(compN_);
 }
 //---------------------------------
