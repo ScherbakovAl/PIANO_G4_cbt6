@@ -21,7 +21,6 @@ void g4() {
     LL_TIM_EnableCounter(TIM5);               // доп счётчик (p100uS)
     LL_TIM_SetAutoReload(TIM8, allChipCount); // PWM - tim clk
     LL_TIM_OC_SetCompareCH3(TIM8, chipAdress);
-    //	LL_TIM_EnableIT_UPDATE(TIM8); // это для теста // for test было когда-то
     LL_TIM_EnableCounter(TIM8); // PWM - tim clk
     //---------------------------------
 
@@ -55,7 +54,7 @@ void g4() {
     LL_DAC_Enable(DAC2, LL_DAC_CHANNEL_1);
 
 
-    for (int i = 0; i < 7; ++i) {
+    for (int i = 0; i < 7; ++i) { // установки по-умолчанию
         if (chipAdress > 13) {
             comp[i][0] = def_off[0];
             comp[i][1] = def_off[1];
@@ -65,6 +64,7 @@ void g4() {
             comp[i][1] = def_on[1];
 
         }
+        comp_calibration[i] = 0;
         comp_set_data(i, comp[i][0]);
         LL_COMP_Enable(comp_def(i));
     }
@@ -133,6 +133,31 @@ void g4() {
             fl = 0;
             // test_counter = 0;
         }
+
+        if (service_commands == subcommand::working) {
+
+            for (uint8_t i = 0; i < 7; ++i) {
+                comp_set_data(i, 0);
+                setCOMP_extVoltage_Down(i);
+                // f[i] = 0;
+                cc_fl[i] = 1;
+            }
+            for (int a = 0; a < 4092; ++a) {
+                for (uint8_t i = 0; i < 7; ++i) {
+                    if (cc_fl[i]) {
+                        comp_set_data(i, a);
+                        if (LL_COMP_ReadOutputLevel(comp_def(i)) == LL_COMP_OUTPUT_LEVEL_LOW) {
+                            comp_calibration[i] = a;
+                            cc_fl[i] = 0;
+                        }
+                        if (a > 4090) {
+                            comp_calibration[i] = 0;
+                        }
+                    }
+                }
+            }
+            service_commands = subcommand::nothing;
+        }
     }
 }
 
@@ -164,7 +189,67 @@ void communication() {
         USART2_Send(compN_, dot_, comp[compN_][dot_]);
     }
 
+    if (rx_settings[0] == command::all_calib) {
+        all_calibration();
+    }
+
     resetData();
+}
+//---------------------------------
+
+// Calibrations
+void calibration() {
+    comp_ext_disable(compN_);
+    comp_set_data(compN_, 0);
+    setCOMP_extVoltage_Down(compN_);
+    f[compN_] = 0;
+    for (int a = 0; a < 4092; ++a) {
+        comp_set_data(compN_, a);
+        if (LL_COMP_ReadOutputLevel(comp_def(compN_)) == LL_COMP_OUTPUT_LEVEL_LOW) {
+            USART2_Send(compN_, dot_, a);
+            break;
+        }
+        if (a > 4090) {
+            USART2_Send(compN_, dot_, 0);
+            break;
+        }
+    }
+    f[compN_] = 0;
+    if (chipAdress > 13) {
+        setCOMP_extVoltage_Up(compN_);
+    }
+    comp_set_data(compN_, comp[compN_][0]);
+    comp_ext_enable(compN_);
+}
+
+void all_calibration() {
+    if (a_ == subcommand::start_calibration) {
+        for (int i = 0; i < 7; ++i) {
+            comp_ext_disable(i);
+        }
+        service_commands = subcommand::working;
+        USART2_Send(compN_, 0, convert8x2to16(subcommand::start_calibration, 0));
+    }
+    else if (a_ == subcommand::read_calibration) {
+        pause(4);
+        USART2_Send(compN_, 0, convert8x2to16(subcommand::read_calibration, 0));
+        for (int i = 0; i < 7; ++i) {
+            pause(6);
+            USART2_Send(i, 0, comp_calibration[i]);
+        }
+        service_commands = subcommand::working;
+    }
+    else if (a_ == subcommand::stop_calibration) {
+        if (!dequeOn.empty()) dequeOn.clear();
+        for (int i = 0; i < 7; ++i) {
+            f[i] = 0;
+            comp_set_data(i, comp[i][0]);
+            comp_ext_enable(i);
+        }
+        if (chipAdress > 13) setCOMP_extVoltage_Up(compN_);
+        service_commands = subcommand::nothing;
+        USART2_Send(compN_, 0, convert8x2to16(subcommand::stop_calibration, 0));
+    }
 }
 //---------------------------------
 
@@ -203,36 +288,6 @@ void USART2_Receive() {
 }
 //---------------------------------
 
-void calibration() {
-    comp_ext_disable(compN_);
-    comp_set_data(compN_, 0);
-    setCOMP_extVoltage_Down(compN_);
-    f[compN_] = 0;
-    for (int a = 0; a < 4092; ++a) {
-        comp_set_data(compN_, a);
-        if (LL_COMP_ReadOutputLevel(comp_def(compN_)) == LL_COMP_OUTPUT_LEVEL_LOW) {
-            USART2_Send(compN_, dot_, a);
-            break;
-        }
-        if (a > 4090) {
-            USART2_Send(compN_, dot_, 0);
-            break;
-        }
-    }
-    f[compN_] = 0;
-    if (chipAdress > 13) {
-        setCOMP_extVoltage_Up(compN_);
-    }
-    comp_set_data(compN_, comp[compN_][0]);
-    comp_ext_enable(compN_);
-}
-//---------------------------------
-
-// TIM IQR Handler
-// void TIM8_UP_IRQ() { // для теста (начало счёта таймера)  // for test
-//     LL_TIM_ClearFlag_UPDATE(TIM8);  // PWM - tim clk
-// }
-
 void TIM8_CC_IRQ() { // это прерывание срабатывает от TIM8 по номеру контроллера
     GPIOB->BSRR = 0x800000; //pB7 // tim interrupter
     LL_TIM_ClearFlag_CC3(TIM8);  // PWM - tim clk
@@ -249,8 +304,8 @@ void USART2_IRQ() {
         LL_TIM_DisableIT_CC3(TIM8);  // PWM - tim clk
         fl = 1;
         GPIOB->BSRR = 0x80; //pB7 // tim interrupter
-    } // TODO add "ELSE IF" ???
-    if (LL_USART_IsActiveFlag_RXNE_RXFNE(USART2)) { // здесь прерывание, если адрес UART совпал
+    }
+    else if (LL_USART_IsActiveFlag_RXNE_RXFNE(USART2)) { // здесь прерывание, если адрес UART совпал
         GPIOB->BSRR = 0x800000; //pB7 // tim interrupter
         communication();
         LL_USART_RequestRxDataFlush(USART2);   // сбрасывает RXNE флаг (или uint8_t data = LL_USART_ReceiveData8(USART2); сбрасывает) // TODO сброс флагов сделать раньше, чем communication? 

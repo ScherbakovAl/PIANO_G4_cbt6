@@ -41,6 +41,8 @@ extern "C" {
     volatile uint32_t tim[7][2] = { };
     uint32_t tim_off[7][2] = { };
     int comp[7][2] = { };
+    int comp_calibration[7] = { };
+    int cc_fl[7] = { }; // флаг. Проверять состояние данного компаратора при калибровке или нет
     int def_on[2] = { 2800, 1200 }; // TODO для noteOFF сдесь сделать правильные значения для запуска
     int def_off[2] = { 2300, 2600 };
     volatile uint8_t f[7] = { 0 };
@@ -54,6 +56,15 @@ extern "C" {
         buff_to_flash,
         flash_to_buff,
         read_comp_value_flash,
+        all_calib
+    };
+
+    enum subcommand {
+        start_calibration = 1,
+        read_calibration,
+        stop_calibration,
+        working,
+        nothing
     };
 
     struct conv16to8x2 {
@@ -73,12 +84,14 @@ extern "C" {
         uint8_t d = 0;
     };
 
+    subcommand service_commands = working;
+
     void resetData();
     void communication();
+    void calibration();
+    void all_calibration();
     void USART2_Send(uint8_t compN, uint8_t dot, int value); // TODO передавать по ссылке, а не по значению
     void USART2_Receive();
-    void calibration();
-    // void TIM8_UP_IRQ();
     void TIM8_CC_IRQ();
     void USART2_IRQ();
     uint32_t timeLength(uint t1, uint t2); // TODO передавать по ссылке, а не по значению
