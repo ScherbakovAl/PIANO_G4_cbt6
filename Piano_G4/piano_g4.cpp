@@ -39,7 +39,15 @@ void g4() {
     LL_USART_EnableIT_TC(USART2);          // прерывание окончания передачи
     //---------------------------------
 
-    // DMA TX
+    // for test // DEBUG
+    // uint8_t tx_data2[5] = { };
+    // tx_data2[0] = 24; // TODO add "& 0xFF" ?
+    // tx_data2[1] = 0; // for test
+    // tx_data2[2] = 0;
+    // tx_data2[3] = 10;
+    // tx_data2[4] = 40;
+
+// DMA TX
     LL_DMA_DisableChannel(DMA1, LL_DMA_CHANNEL_1);
     LL_DMA_SetPeriphAddress(DMA1, LL_DMA_CHANNEL_1, (uint32_t) & (USART2->TDR));
     LL_DMA_SetMemoryAddress(DMA1, LL_DMA_CHANNEL_1, (uint32_t)tx_data);
@@ -121,7 +129,7 @@ void g4() {
         if (!dequeOn.empty() && fl) {
             nt x = dequeOn.front();
             abcd a{ conv32to8(x) };
-            tx_data[0] = x.n;
+            tx_data[0] = x.n; // TODO add "& 0xFF" ?
             tx_data[1] = test_counter; // for test
             tx_data[2] = a.b;
             tx_data[3] = a.c;
@@ -251,7 +259,7 @@ void USART2_IRQ() {
         LL_TIM_DisableIT_CC3(TIM8);  // PWM - tim clk
         fl = 1;
         GPIOB->BSRR = 0x80; //pB7 // tim interrupter
-    }
+    } // TODO add "ELSE IF" ???
     if (LL_USART_IsActiveFlag_RXNE_RXFNE(USART2)) { // здесь прерывание, если адрес UART совпал
         GPIOB->BSRR = 0x800000; //pB7 // tim interrupter
         communication();
