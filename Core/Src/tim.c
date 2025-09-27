@@ -114,8 +114,6 @@ void MX_TIM8_Init(void)
   LL_GPIO_Init(TIM_CLK_GPIO_Port, &GPIO_InitStruct);
 
   /* TIM8 interrupt Init */
-  NVIC_SetPriority(TIM8_UP_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(),3, 0));
-  NVIC_EnableIRQ(TIM8_UP_IRQn);
   NVIC_SetPriority(TIM8_CC_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(),1, 0));
   NVIC_EnableIRQ(TIM8_CC_IRQn);
 

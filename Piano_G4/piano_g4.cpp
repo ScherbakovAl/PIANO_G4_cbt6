@@ -39,15 +39,7 @@ void g4() {
     LL_USART_EnableIT_TC(USART2);          // прерывание окончания передачи
     //---------------------------------
 
-    // for test // DEBUG
-    // uint8_t tx_data2[5] = { };
-    // tx_data2[0] = 24; // TODO add "& 0xFF" ?
-    // tx_data2[1] = 0; // for test
-    // tx_data2[2] = 0;
-    // tx_data2[3] = 10;
-    // tx_data2[4] = 40;
-
-// DMA TX
+    // DMA TX
     LL_DMA_DisableChannel(DMA1, LL_DMA_CHANNEL_1);
     LL_DMA_SetPeriphAddress(DMA1, LL_DMA_CHANNEL_1, (uint32_t) & (USART2->TDR));
     LL_DMA_SetMemoryAddress(DMA1, LL_DMA_CHANNEL_1, (uint32_t)tx_data);
@@ -96,9 +88,7 @@ void g4() {
     }
 
     while (1) {
-        // LL_USART_EnableDirectionTx(USART2); // for test // DEBUG
         for (uint8_t i = 0; i < 7; ++i) {
-            // if (i == 3)LL_USART_DisableDirectionTx(USART2); // for test // DEBUG
             if (f[i] != 0) {
                 if (f[i] == 1) {
                     tim_off[i][0] = TIM5->CNT; // TIM5 (p100us)
@@ -141,7 +131,7 @@ void g4() {
             LL_TIM_EnableIT_CC3(TIM8);  // PWM - tim clk
             dequeOn.pop_front();
             fl = 0;
-            test_counter = 0;
+            // test_counter = 0;
         }
     }
 }
