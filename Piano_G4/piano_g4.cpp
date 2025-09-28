@@ -134,29 +134,30 @@ void g4() {
             // test_counter = 0;
         }
 
-        if (service_commands == subcommand::working) {
-
-            for (uint8_t i = 0; i < 7; ++i) {
-                comp_set_data(i, 0);
-                setCOMP_extVoltage_Down(i);
-                // f[i] = 0;
-                cc_fl[i] = 1;
-            }
-            for (int a = 0; a < 4092; ++a) {
+        while (service_flag) {
+            if (service_commands == subcommand::working) {
                 for (uint8_t i = 0; i < 7; ++i) {
-                    if (cc_fl[i]) {
-                        comp_set_data(i, a);
-                        if (LL_COMP_ReadOutputLevel(comp_def(i)) == LL_COMP_OUTPUT_LEVEL_LOW) {
-                            comp_calibration[i] = a;
-                            cc_fl[i] = 0;
-                        }
-                        if (a > 4090) {
-                            comp_calibration[i] = 0;
+                    comp_set_data(i, 0);
+                    setCOMP_extVoltage_Down(i);
+                    // f[i] = 0;
+                    cc_fl[i] = 1;
+                }
+                for (int a = 0; a < 4092; ++a) {
+                    for (uint8_t i = 0; i < 7; ++i) {
+                        if (cc_fl[i]) {
+                            comp_set_data(i, a);
+                            if (LL_COMP_ReadOutputLevel(comp_def(i)) == LL_COMP_OUTPUT_LEVEL_LOW) {
+                                comp_calibration[i] = a;
+                                cc_fl[i] = 0;
+                            }
+                            if (a > 4090) {
+                                comp_calibration[i] = 0;
+                            }
                         }
                     }
                 }
+                service_commands = subcommand::nothing;
             }
-            service_commands = subcommand::nothing;
         }
     }
 }
@@ -174,10 +175,12 @@ void communication() {
     if (rx_settings[0] == command::sync_timer) {
         TIM8->CNT = 0;  // PWM - tim clk
         USART2_Send(compN_, dot_, 0);
+        resetData();
     }
 
     if (rx_settings[0] == command::cal) {
         calibration();
+        resetData();
     }
 
     if (rx_settings[0] == command::read_comp_value) {
@@ -187,13 +190,12 @@ void communication() {
     if (rx_settings[0] == command::set_comp_value) {
         comp[compN_][dot_] = convert8x2to16(a_, b_);
         USART2_Send(compN_, dot_, comp[compN_][dot_]);
+        resetData();
     }
 
     if (rx_settings[0] == command::all_calib) {
         all_calibration();
     }
-
-    resetData();
 }
 //---------------------------------
 
@@ -223,23 +225,24 @@ void calibration() {
 }
 
 void all_calibration() {
-    if (a_ == subcommand::start_calibration) {
+    if (dot_ == subcommand::start_calibration) {
         for (int i = 0; i < 7; ++i) {
             comp_ext_disable(i);
         }
         service_commands = subcommand::working;
-        USART2_Send(compN_, 0, convert8x2to16(subcommand::start_calibration, 0));
+        service_flag = 1;
+        USART2_Send(compN_, subcommand::start_calibration, 0);
     }
-    else if (a_ == subcommand::read_calibration) {
+    else if (dot_ == subcommand::read_calibration) {
         pause(4);
-        USART2_Send(compN_, 0, convert8x2to16(subcommand::read_calibration, 0));
         for (int i = 0; i < 7; ++i) {
             pause(6);
             USART2_Send(i, 0, comp_calibration[i]);
         }
         service_commands = subcommand::working;
+        USART2_Send(compN_, subcommand::read_calibration, 0);
     }
-    else if (a_ == subcommand::stop_calibration) {
+    else if (dot_ == subcommand::stop_calibration) {
         if (!dequeOn.empty()) dequeOn.clear();
         for (int i = 0; i < 7; ++i) {
             f[i] = 0;
@@ -248,7 +251,8 @@ void all_calibration() {
         }
         if (chipAdress > 13) setCOMP_extVoltage_Up(compN_);
         service_commands = subcommand::nothing;
-        USART2_Send(compN_, 0, convert8x2to16(subcommand::stop_calibration, 0));
+        service_flag = 0;
+        USART2_Send(compN_, subcommand::stop_calibration, 0);
     }
 }
 //---------------------------------
