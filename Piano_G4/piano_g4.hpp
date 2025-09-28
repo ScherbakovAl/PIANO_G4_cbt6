@@ -16,13 +16,13 @@ extern "C" {
     using uint = unsigned int;
     using cuint = const uint;
 
-    const int chipAdress = 26; // 1-13-on, 14-26-off
+    const int chipAdress = 13; // 1-13-on, 14-26-off
     const int allChipCount = 27; // до этого значения считает таймер
     const uint8_t note = chipAdress * 7;
     // !!!  ***  !!!   подтяжки линий (в UART нужен UP для Tx у одного из g4)+(UP для линии прерываний)   !!!  ***  !!!
 
     // data
-    uint8_t tx_data[5] = { }; // TODO uint8_t->uint32_t ??? !!! ->  45: LL_DMA_SetMemoryAddress(DMA1, LL_DMA_CHANNEL_1, <<<(uint32_t)>>> tx_data); <<<< !!!!
+    uint8_t tx_data[4] = { }; // TODO uint8_t->uint32_t ??? !!! ->  45: LL_DMA_SetMemoryAddress(DMA1, LL_DMA_CHANNEL_1, <<<(uint32_t)>>> tx_data); <<<< !!!!
     const int tx_dataLength = sizeof(tx_data);
 
     // settings
@@ -81,7 +81,6 @@ extern "C" {
         uint8_t a = 0;
         uint8_t b = 0;
         uint8_t c = 0;
-        uint8_t d = 0;
     };
 
     subcommand service_commands = working;

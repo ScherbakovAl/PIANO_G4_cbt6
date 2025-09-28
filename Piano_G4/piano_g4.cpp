@@ -9,7 +9,7 @@
 
 #include "deque"
 std::deque<nt> dequeOn;
-volatile uint32_t test_counter = 0;
+
 // main
 void g4() {
 
@@ -45,7 +45,7 @@ void g4() {
     LL_DMA_SetDataLength(DMA1, LL_DMA_CHANNEL_1, tx_dataLength);
     //---------------------------------
 
-    LL_DAC_Enable(DAC1, LL_DAC_CHANNEL_1); // TODO установить выше, чем LL_DAC_ConvertData12RightAligned ????
+    LL_DAC_Enable(DAC1, LL_DAC_CHANNEL_1);
     LL_DAC_Enable(DAC1, LL_DAC_CHANNEL_2);
     LL_DAC_Enable(DAC3, LL_DAC_CHANNEL_1);
     LL_DAC_Enable(DAC3, LL_DAC_CHANNEL_2);
@@ -120,10 +120,9 @@ void g4() {
             nt x = dequeOn.front();
             abcd a{ conv32to8(x) };
             tx_data[0] = x.n; // TODO add "& 0xFF" ?
-            tx_data[1] = test_counter; // for test
+            tx_data[1] = a.a;
             tx_data[2] = a.b;
             tx_data[3] = a.c;
-            tx_data[4] = a.d;
             LL_DMA_DisableChannel(DMA1, LL_DMA_CHANNEL_1);
             LL_DMA_SetDataLength(DMA1, LL_DMA_CHANNEL_1, tx_dataLength);
             LL_USART_ClearFlag_TC(USART2);
@@ -131,7 +130,6 @@ void g4() {
             LL_TIM_EnableIT_CC3(TIM8);  // PWM - tim clk
             dequeOn.pop_front();
             fl = 0;
-            // test_counter = 0;
         }
 
         while (service_flag) {
@@ -266,21 +264,21 @@ void USART2_Send(const uint8_t& compN, const uint8_t& dot, const int& value) {
     tx_settings[2] = { dot };
     tx_settings[3] = c.a;
     tx_settings[4] = c.b;
-    while (!LL_USART_IsActiveFlag_TXE(USART2)) {} // for test add ++test_counter;
+    while (!LL_USART_IsActiveFlag_TXE(USART2)) {}
     for (int i = 0; i < tx_settings_length; i++) {
         LL_USART_TransmitData9(USART2, tx_settings[i]);
-        while (!LL_USART_IsActiveFlag_TXE(USART2)) {} // for test add ++test_counter;
+        while (!LL_USART_IsActiveFlag_TXE(USART2)) {}
     }
-    while (!LL_USART_IsActiveFlag_TC(USART2)) {} // for test add ++test_counter;
+    while (!LL_USART_IsActiveFlag_TC(USART2)) {}
     LL_USART_DisableDirectionTx(USART2);
     LL_USART_ClearFlag_TC(USART2);
 }
 
 void USART2_Receive() {
-    while (!LL_USART_IsActiveFlag_RXNE(USART2)) {} // for test add ++test_counter;
+    while (!LL_USART_IsActiveFlag_RXNE(USART2)) {}
     rx_settings[0] = LL_USART_ReceiveData9(USART2);
     for (int i = 0; i < rx_settings_length; i++) {
-        while (!LL_USART_IsActiveFlag_RXNE(USART2)) {} // for test add ++test_counter;
+        while (!LL_USART_IsActiveFlag_RXNE(USART2)) {}
         rx_settings[i] = LL_USART_ReceiveData9(USART2);
     }
     compN_ = rx_settings[1];
@@ -350,10 +348,9 @@ conv16to8x2 convert16to8x2(const int& a) { // TODO AI - Проблема: Неп
 abcd conv32to8(const nt& x) {
     abcd a;
     uint32_t u = x.timelegth;
-    a.a = (u & 0xff << 24) >> 24;
-    a.b = (u & 0xff << 16) >> 16;
-    a.c = (u & 0xff << 8) >> 8;
-    a.d = u & 0xff;
+    a.a = (u & 0xff << 16) >> 16;
+    a.b = (u & 0xff << 8) >> 8;
+    a.c = u & 0xff;
     return a;
 }
 //---------------------------------
