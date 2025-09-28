@@ -225,24 +225,24 @@ void calibration() {
 }
 
 void all_calibration() {
-    if (dot_ == subcommand::start_calibration) {
+    if (b_ == subcommand::start_calibration) {
         for (int i = 0; i < 7; ++i) {
             comp_ext_disable(i);
         }
         service_commands = subcommand::working;
         service_flag = 1;
-        USART2_Send(compN_, subcommand::start_calibration, 0);
+        USART2_Send(compN_, 0, subcommand::start_calibration);
     }
-    else if (dot_ == subcommand::read_calibration) {
+    else if (b_ == subcommand::read_calibration) {
         pause(4);
+        USART2_Send(compN_, 0, subcommand::read_calibration);
         for (int i = 0; i < 7; ++i) {
             pause(6);
             USART2_Send(i, 0, comp_calibration[i]);
         }
         service_commands = subcommand::working;
-        USART2_Send(compN_, subcommand::read_calibration, 0);
     }
-    else if (dot_ == subcommand::stop_calibration) {
+    else if (b_ == subcommand::stop_calibration) {
         if (!dequeOn.empty()) dequeOn.clear();
         for (int i = 0; i < 7; ++i) {
             f[i] = 0;
@@ -252,13 +252,13 @@ void all_calibration() {
         if (chipAdress > 13) setCOMP_extVoltage_Up(compN_);
         service_commands = subcommand::nothing;
         service_flag = 0;
-        USART2_Send(compN_, subcommand::stop_calibration, 0);
+        USART2_Send(compN_, 0, subcommand::stop_calibration);
     }
 }
 //---------------------------------
 
 // UART Send-Recive
-void USART2_Send(uint8_t compN, uint8_t dot, int value) {
+void USART2_Send(const uint8_t& compN, const uint8_t& dot, const int& value) {
     LL_USART_EnableDirectionTx(USART2); // отправлять только при ВЫКЛюченных остальных слэйв-трансляторах.. иначе замыкание
     conv16to8x2 c;
     c = convert16to8x2(value);
@@ -320,12 +320,12 @@ void USART2_IRQ() {
 //---------------------------------
 
 // (100ns)
-void pause(uint p) {
+void pause(const uint& p) {
     TIM2->CNT = 0;
     while (TIM2->CNT < p) {}
 }
 
-uint32_t timeLength(uint t1, uint t2) {
+uint32_t timeLength(const uint& t1, const uint& t2) {
     uint32_t tOut;
     if (t1 > t2) {
         tOut = (4'294'967'295 - t1) + t2 + 1;
@@ -336,18 +336,18 @@ uint32_t timeLength(uint t1, uint t2) {
     return tOut;
 }
 
-int convert8x2to16(uint8_t a, uint8_t b) {
+int convert8x2to16(const uint8_t& a, const uint8_t& b) {
     return a << 8 | b;
 }
 
-conv16to8x2 convert16to8x2(int a) { // TODO AI - Проблема: Неправильный порядок операций. Должно быть r.a = (a & (0xff << 8)) >> 8; или r.a = (a >> 8) & 0xff;
+conv16to8x2 convert16to8x2(const int& a) { // TODO AI - Проблема: Неправильный порядок операций. Должно быть r.a = (a & (0xff << 8)) >> 8; или r.a = (a >> 8) & 0xff;
     conv16to8x2 r;
     r.a = (a & 0xff << 8) >> 8;
     r.b = a & 0xff;
     return r;
 }
 
-abcd conv32to8(nt x) {
+abcd conv32to8(const nt& x) {
     abcd a;
     uint32_t u = x.timelegth;
     a.a = (u & 0xff << 24) >> 24;
@@ -359,7 +359,7 @@ abcd conv32to8(nt x) {
 //---------------------------------
 
 // COMPs controls
-void setCOMP_extVoltage_Up(int compN) {
+void setCOMP_extVoltage_Up(const int& compN) {
     switch (compN) {
     case 0:
         LL_EXTI_DisableFallingTrig_0_31(LL_EXTI_LINE_21);
@@ -406,7 +406,7 @@ void setCOMP_extVoltage_Up(int compN) {
     }
 }
 
-void setCOMP_extVoltage_Down(int compN) {
+void setCOMP_extVoltage_Down(const int& compN) {
     switch (compN) {
     case 0:
         LL_EXTI_DisableRisingTrig_0_31(LL_EXTI_LINE_21);
@@ -465,7 +465,7 @@ void set_ALL_COMP_extVoltage_Down() {
     }
 }
 
-void comp_ext_enable(int compN) {
+void comp_ext_enable(const int& compN) {
     switch (compN) {
     case 0:
         LL_EXTI_EnableIT_0_31(LL_EXTI_LINE_21);
@@ -491,7 +491,7 @@ void comp_ext_enable(int compN) {
     }
 }
 
-void comp_ext_disable(int compN) {
+void comp_ext_disable(const int& compN) {
     switch (compN) {
     case 0:
         LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_21);
@@ -524,7 +524,7 @@ void comp_ext_disable(int compN) {
     }
 }
 
-void comp_set_data(int compN, int data) {
+void comp_set_data(const int& compN, const int& data) {
     switch (compN) {
     case 0:
         LL_DAC_ConvertData12RightAligned(DAC1, LL_DAC_CHANNEL_1, data);
@@ -550,7 +550,7 @@ void comp_set_data(int compN, int data) {
     }
 }
 
-COMP_TypeDef* comp_def(const int i) {
+COMP_TypeDef* comp_def(const int& i) {
     switch (i) {
     case 0:
         return COMP1;
@@ -629,7 +629,7 @@ void COMP7_IRQ(void) { // line 33
     }
 }
 
-void iffing(int a) {
+void iffing(const int& a) {
     if (f[a] == 0) {
         f[a] = 1;
         tim[a][0] = TIM2->CNT;

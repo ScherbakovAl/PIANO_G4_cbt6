@@ -91,27 +91,27 @@ extern "C" {
     void communication();
     void calibration();
     void all_calibration();
-    void USART2_Send(uint8_t compN, uint8_t dot, int value); // TODO передавать по ссылке, а не по значению
+    void USART2_Send(const uint8_t& compN, const uint8_t& dot, const int& value); // TODO передавать по ссылке, а не по значению
     void USART2_Receive();
     void TIM8_CC_IRQ();
     void USART2_IRQ();
-    uint32_t timeLength(uint t1, uint t2); // TODO передавать по ссылке, а не по значению
-    void pause(uint p); // TODO передавать по ссылке, а не по значению
-    int convert8x2to16(uint8_t a, uint8_t b); // TODO передавать по ссылке, а не по значению
-    conv16to8x2 convert16to8x2(int a); // TODO передавать по ссылке, а не по значению
-    abcd conv32to8(nt x); // TODO передавать по ссылке, а не по значению
-    void setCOMP_extVoltage_Up(int compN); // TODO передавать по ссылке, а не по значению
-    void setCOMP_extVoltage_Down(int compN); // TODO передавать по ссылке, а не по значению
+    uint32_t timeLength(const uint& t1, const uint& t2); // TODO передавать по ссылке, а не по значению
+    void pause(const uint& p); // TODO передавать по ссылке, а не по значению
+    int convert8x2to16(const uint8_t& a, const uint8_t& b); // TODO передавать по ссылке, а не по значению
+    conv16to8x2 convert16to8x2(const int& a); // TODO передавать по ссылке, а не по значению
+    abcd conv32to8(const nt& x); // TODO передавать по ссылке, а не по значению
+    void setCOMP_extVoltage_Up(const int& compN); // TODO передавать по ссылке, а не по значению
+    void setCOMP_extVoltage_Down(const int& compN); // TODO передавать по ссылке, а не по значению
     void set_ALL_COMP_extVoltage_Up();
     void set_ALL_COMP_extVoltage_Down();
-    void comp_ext_enable(int compN); // TODO передавать по ссылке, а не по значению
-    void comp_ext_disable(int compN); // TODO передавать по ссылке, а не по значению
-    void comp_set_data(int compN, int dot); // TODO передавать по ссылке, а не по значению
+    void comp_ext_enable(const int& compN); // TODO передавать по ссылке, а не по значению
+    void comp_ext_disable(const int& compN); // TODO передавать по ссылке, а не по значению
+    void comp_set_data(const int& compN, const int& data); // TODO передавать по ссылке, а не по значению
     void COMP1_2_3_IRQ();
     void COMP4_5_6_IRQ();
     void COMP7_IRQ();
-    void iffing(int a); // TODO передавать по ссылке, а не по значению
-    COMP_TypeDef* comp_def(const int i); // TODO передавать по ссылке, а не по значению
+    void iffing(const int& a); // TODO передавать по ссылке, а не по значению
+    COMP_TypeDef* comp_def(const int& i); // TODO передавать по ссылке, а не по значению
 
 }
 #endif // extern "C"
