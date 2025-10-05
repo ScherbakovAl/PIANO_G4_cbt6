@@ -174,7 +174,7 @@ void g4() {
 }
 
 void resetData() {
-    if (!dequeOn.empty()) dequeOn.clear();
+    // if (!dequeOn.empty()) dequeOn.clear(); // TODO нельзя это очищать из прерывания!!!
     for (uint8_t i = 0; i < 7; ++i) {
         f[i] = 0;
     }
