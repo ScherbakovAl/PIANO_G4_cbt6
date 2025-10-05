@@ -79,7 +79,7 @@ void g4() {
 
     if (chipAdress > 13) {
         set_ALL_COMP_extVoltage_Up(); // для ship OFF
-        windowReTRigger1 = 10 * 40; // = 40ms // TIM5 (p100us)
+        windowReTRigger1 = 10 * 60; // = 40ms // TIM5 (p100us)
         windowReTRigger2 = 10 * 60; // = 60ms // TIM5 (p100us)
     }
     else { // ship ON
@@ -94,12 +94,16 @@ void g4() {
                     tim_off[i][0] = TIM5->CNT; // TIM5 (p100us)
                     comp_set_data(i, comp[i][1]);
                     f[i] = 2;
+                    nt n{ 200, 12 }; // for test
+                    dequeOn.push_back(n); // for test
                     comp_ext_enable(i);
                 }
                 if (f[i] == 2 && TIM5->CNT - tim_off[i][0] > windowReTRigger1) {
                     comp_ext_disable(i);
                     comp_set_data(i, comp[i][0]);
                     f[i] = 0;
+                    nt n{ 200, 20 }; // for test
+                    dequeOn.push_back(n); // for test
                     comp_ext_enable(i);
                 }
                 if (f[i] == 3) {
@@ -111,6 +115,8 @@ void g4() {
                 if (f[i] == 4 && TIM5->CNT - tim_off[i][1] > windowReTRigger2) {
                     comp_set_data(i, comp[i][0]);
                     f[i] = 0;
+                    nt n{ 200, 40 }; // for test
+                    dequeOn.push_back(n); // for test
                     comp_ext_enable(i);
                 }
             }
@@ -133,11 +139,8 @@ void g4() {
         }
 
         while (service_flag) {
-            if (service_commands == subcommand::working) {
+            if (service_commands == subcommand::working && flag_Service_command) {
                 for (uint8_t i = 0; i < 7; ++i) {
-                    comp_set_data(i, 0);
-                    setCOMP_extVoltage_Down(i);
-                    // f[i] = 0;
                     cc_fl[i] = 1;
                 }
                 for (int a = 0; a < 4092; ++a) {
@@ -154,7 +157,17 @@ void g4() {
                         }
                     }
                 }
-                service_commands = subcommand::nothing;
+                flag_Service_command = 0;
+            }
+            if (service_commands == subcommand::exit) {
+                if (!dequeOn.empty()) dequeOn.clear();
+                for (int i = 0; i < 7; ++i) {
+                    f[i] = 0;
+                    comp_set_data(i, comp[i][0]);
+                    comp_ext_enable(i);
+                }
+                service_flag = 0;
+                USART2_Send(compN_, 0, subcommand::stop_calibration);
             }
         }
     }
@@ -201,7 +214,6 @@ void communication() {
 void calibration() {
     comp_ext_disable(compN_);
     comp_set_data(compN_, 0);
-    setCOMP_extVoltage_Down(compN_);
     f[compN_] = 0;
     for (int a = 0; a < 4092; ++a) {
         comp_set_data(compN_, a);
@@ -215,9 +227,6 @@ void calibration() {
         }
     }
     f[compN_] = 0;
-    if (chipAdress > 13) {
-        setCOMP_extVoltage_Up(compN_);
-    }
     comp_set_data(compN_, comp[compN_][0]);
     comp_ext_enable(compN_);
 }
@@ -225,6 +234,7 @@ void calibration() {
 void all_calibration() {
     if (b_ == subcommand::start_calibration) {
         for (int i = 0; i < 7; ++i) {
+            f[i] = 0;
             comp_ext_disable(i);
         }
         service_commands = subcommand::working;
@@ -238,19 +248,10 @@ void all_calibration() {
             pause(6);
             USART2_Send(i, 0, comp_calibration[i]);
         }
-        service_commands = subcommand::working;
+        flag_Service_command = 1;
     }
     else if (b_ == subcommand::stop_calibration) {
-        if (!dequeOn.empty()) dequeOn.clear();
-        for (int i = 0; i < 7; ++i) {
-            f[i] = 0;
-            comp_set_data(i, comp[i][0]);
-            comp_ext_enable(i);
-        }
-        if (chipAdress > 13) setCOMP_extVoltage_Up(compN_);
-        service_commands = subcommand::nothing;
-        service_flag = 0;
-        USART2_Send(compN_, 0, subcommand::stop_calibration);
+        service_commands = subcommand::exit;
     }
 }
 //---------------------------------
@@ -290,6 +291,7 @@ void USART2_Receive() {
 }
 //---------------------------------
 
+// TIM8 IRQ Handler
 void TIM8_CC_IRQ() { // это прерывание срабатывает от TIM8 по номеру контроллера
     GPIOB->BSRR = 0x800000; //pB7 // tim interrupter
     LL_TIM_ClearFlag_CC3(TIM8);  // PWM - tim clk
@@ -298,7 +300,7 @@ void TIM8_CC_IRQ() { // это прерывание срабатывает от 
 }
 //---------------------------------
 
-// UART IQR Handler
+// UART IRQ Handler
 void USART2_IRQ() {
     if (LL_USART_IsActiveFlag_TC(USART2)) {  // здесь прерывание, если завершена передача данных
         LL_USART_DisableDirectionTx(USART2); // один или несколько должны быть подтянуты к pull_UP !
@@ -361,7 +363,7 @@ void setCOMP_extVoltage_Up(const int& compN) {
     case 0:
         LL_EXTI_DisableFallingTrig_0_31(LL_EXTI_LINE_21);
         LL_EXTI_EnableRisingTrig_0_31(LL_EXTI_LINE_21);
-        LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_21); // TODO может быть это подвинуть выше надо?
+        LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_21);
         LL_EXTI_DisableEvent_0_31(LL_EXTI_LINE_21);
         break;
     case 1:
@@ -408,7 +410,7 @@ void setCOMP_extVoltage_Down(const int& compN) {
     case 0:
         LL_EXTI_DisableRisingTrig_0_31(LL_EXTI_LINE_21);
         LL_EXTI_EnableFallingTrig_0_31(LL_EXTI_LINE_21);
-        LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_21); // TODO может быть это подвинуть выше надо?
+        LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_21);
         LL_EXTI_DisableEvent_0_31(LL_EXTI_LINE_21);
         break;
     case 1:
@@ -491,32 +493,32 @@ void comp_ext_enable(const int& compN) {
 void comp_ext_disable(const int& compN) {
     switch (compN) {
     case 0:
-        LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_21);
         LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_21);
+        LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_21);
         break;
     case 1:
-        LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_22);
         LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_22);
+        LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_22);
         break;
     case 2:
-        LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_29);
         LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_29);
+        LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_29);
         break;
     case 3:
-        LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_30);
         LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_30);
+        LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_30);
         break;
     case 4:
-        LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_31);
         LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_31);
+        LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_31);
         break;
     case 5:
-        LL_EXTI_DisableIT_32_63(LL_EXTI_LINE_32);
         LL_EXTI_ClearFlag_32_63(LL_EXTI_LINE_32);
+        LL_EXTI_DisableIT_32_63(LL_EXTI_LINE_32);
         break;
     case 6:
-        LL_EXTI_DisableIT_32_63(LL_EXTI_LINE_33);
         LL_EXTI_ClearFlag_32_63(LL_EXTI_LINE_33);
+        LL_EXTI_DisableIT_32_63(LL_EXTI_LINE_33);
         break;
     }
 }
@@ -577,20 +579,14 @@ COMP_TypeDef* comp_def(const int& i) {
 // COMPs IQR Handlers
 void COMP1_2_3_IRQ() { // line 21, 22, 29
     if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_21)) {
-        // LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_21); // TODO работает ли вместо этого comp_ext_disable ?
-        // LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_21);
         comp_ext_disable(0);
         iffing(0);
     }
     if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_22)) {
-        // LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_22);
-        // LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_22);
         comp_ext_disable(1);
         iffing(1);
     }
     if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_29)) {
-        // LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_29);
-        // LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_29);
         comp_ext_disable(2);
         iffing(2);
     }
@@ -598,20 +594,14 @@ void COMP1_2_3_IRQ() { // line 21, 22, 29
 
 void COMP4_5_6_IRQ(void) { // line 30, 31, 32
     if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_30)) {
-        // LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_30);
-        // LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_30);
         comp_ext_disable(3);
         iffing(3);
     }
     if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_31)) {
-        // LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_31);
-        // LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_31);
         comp_ext_disable(4);
         iffing(4);
     }
     if (LL_EXTI_IsActiveFlag_32_63(LL_EXTI_LINE_32)) {
-        // LL_EXTI_ClearFlag_32_63(LL_EXTI_LINE_32);
-        // LL_EXTI_DisableIT_32_63(LL_EXTI_LINE_32);
         comp_ext_disable(5);
         iffing(5);
     }
@@ -619,8 +609,6 @@ void COMP4_5_6_IRQ(void) { // line 30, 31, 32
 
 void COMP7_IRQ(void) { // line 33
     if (LL_EXTI_IsActiveFlag_32_63(LL_EXTI_LINE_33)) {
-        // LL_EXTI_ClearFlag_32_63(LL_EXTI_LINE_33);
-        // LL_EXTI_DisableIT_32_63(LL_EXTI_LINE_33);
         comp_ext_disable(6);
         iffing(6);
     }

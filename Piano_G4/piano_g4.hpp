@@ -16,7 +16,7 @@ extern "C" {
     using uint = unsigned int;
     using cuint = const uint;
 
-    const int chipAdress = 13; // 1-13-on, 14-26-off
+    const int chipAdress = 14; // 1-13-on, 14-26-off
     const int allChipCount = 27; // до этого значения считает таймер
     const uint8_t note = chipAdress * 7;
     // !!!  ***  !!!   подтяжки линий (в UART нужен UP для Tx у одного из g4)+(UP для линии прерываний)   !!!  ***  !!!
@@ -47,6 +47,7 @@ extern "C" {
     int def_off[2] = { 2300, 2600 };
     volatile uint8_t f[7] = { 0 };
     volatile int fl = 1;
+    volatile int flag_Service_command = 1;
 
     enum command {
         sync_timer = 1,
@@ -64,7 +65,8 @@ extern "C" {
         read_calibration,
         stop_calibration,
         working,
-        nothing
+        nothing,
+        exit
     };
 
     struct conv16to8x2 {
