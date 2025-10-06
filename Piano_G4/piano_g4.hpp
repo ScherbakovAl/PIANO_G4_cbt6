@@ -16,7 +16,7 @@ extern "C" {
     using uint = unsigned int;
     using cuint = const uint;
 
-    const int chipAdress = 14; // 1-13-on, 14-26-off
+    const int chipAdress = 23; // 1-13-on, 14-26-off
     const int allChipCount = 27; // до этого значения считает таймер
     const uint8_t note = chipAdress * 7;
     // !!!  ***  !!!   подтяжки линий (в UART нужен UP для Tx у одного из g4)+(UP для линии прерываний)   !!!  ***  !!!
