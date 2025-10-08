@@ -78,8 +78,8 @@ void g4() {
 // TIM5 - presc = 13599 - 100us период
 
     if (chipAdress > 13) {
-        set_ALL_COMP_extVoltage_Up(); // для ship OFF
-        windowReTRigger1 = 10 * 60; // = 40ms // TIM5 (p100us)
+        // set_ALL_COMP_extVoltage_Up(); // для ship OFF
+        windowReTRigger1 = 10 * 60; // = 40ms // TIM5 (p100us) // TODO провериь бОльшие значения
         windowReTRigger2 = 10 * 60; // = 60ms // TIM5 (p100us)
     }
     else { // ship ON
@@ -89,7 +89,8 @@ void g4() {
 
     while (1) {
         for (uint8_t i = 0; i < 7; ++i) {
-            if (f[i] != 0) {
+#ifndef CHipForNoteOFF
+            if (f[i] != 0) { // for note on
                 if (f[i] == 1) {
                     tim_off[i][0] = TIM5->CNT; // TIM5 (p100us)
                     comp_set_data(i, comp[i][1]);
@@ -120,6 +121,44 @@ void g4() {
                     comp_ext_enable(i);
                 }
             }
+#endif
+#ifdef CHipForNoteOFF
+            if (f[i] != 0) { // for note off
+                if (f[i] == 1) {
+                    setCOMP_extVoltage_Up(i);
+                    comp_set_data(i, comp[i][0]);
+                    f[i] = 2;
+                    comp_ext_enable(i);
+                }
+                if (f[i] == 3) {
+                    tim_off[i][0] = TIM5->CNT;
+                    comp_set_data(i, comp[i][1]);
+                    f[i] = 4;
+                    comp_ext_enable(i);
+
+                }
+                 // TODO видимо эту    vvvvv    секцию надо удалить      vvvvv
+                // if (f[i] == 4 && TIM5->CNT - tim_off[i][0] > windowReTRigger1) {
+                //     comp_ext_disable(i);
+                //     comp_set_data(i, comp[i][2]); // ?
+                //     setCOMP_extVoltage_Down(i); // ?
+                //     f[i] = 0; // ?
+                //     comp_ext_enable(i);
+                // }
+                if (f[i] == 5) {
+                    tim_off[i][1] = TIM5->CNT;
+                    f[i] = 6;
+                    nt n{ note + i, timeLength(tim[i][0], tim[i][1]) };
+                    dequeOn.push_back(n);
+                }
+                if (f[i] == 6 && TIM5->CNT - tim_off[i][1] > windowReTRigger2) {
+                    comp_set_data(i, comp[i][2]);
+                    setCOMP_extVoltage_Down(i);
+                    f[i] = 0;
+                    comp_ext_enable(i);
+                }
+            }
+#endif
         }
 
         if (!dequeOn.empty() && fl) {
@@ -613,7 +652,10 @@ void COMP7_IRQ(void) { // line 33
         iffing(6);
     }
 }
+//---------------------------------
 
+
+#ifndef CHipForNoteOFF
 void iffing(const int& a) {
     if (f[a] == 0) {
         f[a] = 1;
@@ -624,4 +666,22 @@ void iffing(const int& a) {
         tim[a][1] = TIM2->CNT;
     }
 }
+#endif
+
+#ifdef CHipForNoteOFF
+
+void iffing(const int& a) {
+    if (f[a] == 0) {
+        f[a] = 1;
+    }
+    if (f[a] == 2) {
+        f[a] = 3;
+        tim[a][0] = TIM2->CNT;
+    }
+    if (f[a] == 4) {
+        f[a] = 5;
+        tim[a][1] = TIM2->CNT;
+    }
+}
+#endif
 //---------------------------------

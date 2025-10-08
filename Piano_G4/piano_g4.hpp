@@ -16,7 +16,13 @@ extern "C" {
     using uint = unsigned int;
     using cuint = const uint;
 
-    const int chipAdress = 23; // 1-13-on, 14-26-off
+    #define CHAddr 23
+    
+    #if CHAddr > 13
+    #define CHipForNoteOFF
+    #endif
+    
+    const int chipAdress = CHAddr; // 1-13-on, 14-26-off
     const int allChipCount = 27; // до этого значения считает таймер
     const uint8_t note = chipAdress * 7;
     // !!!  ***  !!!   подтяжки линий (в UART нужен UP для Tx у одного из g4)+(UP для линии прерываний)   !!!  ***  !!!
@@ -40,12 +46,12 @@ extern "C" {
 
     volatile uint32_t tim[7][2] = { };
     uint32_t tim_off[7][2] = { };
-    int comp[7][2] = { };
+    int comp[7][3] = { };
     int comp_calibration[7] = { };
     int cc_fl[7] = { }; // флаг. Проверять состояние данного компаратора при калибровке или нет
     int def_on[2] = { 2800, 1200 }; // TODO для noteOFF сдесь сделать правильные значения для запуска
-    int def_off[2] = { 2300, 2600 };
-    volatile uint8_t f[7] = { 0 };
+    int def_off[3] = { 2300, 2600, 2000 }; // [0]-1я точка, затем 2я. [2] - точка переключения направления срабатывания компаратора
+    volatile int8_t f[7] = { 0 };
     volatile int fl = 1;
     volatile int flag_Service_command = 1;
 
