@@ -95,16 +95,12 @@ void g4() {
                     tim_off[i][0] = TIM5->CNT; // TIM5 (p100us)
                     comp_set_data(i, comp[i][1]);
                     f[i] = 2;
-                    // nt n{ 200, 12 }; // for test
-                    // dequeOn.push_back(n); // for test
                     comp_ext_enable(i);
                 }
                 if (f[i] == 2 && TIM5->CNT - tim_off[i][0] > windowReTRigger1) {
                     comp_ext_disable(i);
                     comp_set_data(i, comp[i][0]);
                     f[i] = 0;
-                    // nt n{ 200, 20 }; // for test
-                    // dequeOn.push_back(n); // for test
                     comp_ext_enable(i);
                 }
                 if (f[i] == 3) {
@@ -116,8 +112,6 @@ void g4() {
                 if (f[i] == 4 && TIM5->CNT - tim_off[i][1] > windowReTRigger2) {
                     comp_set_data(i, comp[i][0]);
                     f[i] = 0;
-                    // nt n{ 200, 40 }; // for test
-                    // dequeOn.push_back(n); // for test
                     comp_ext_enable(i);
                 }
             }
@@ -351,7 +345,7 @@ void USART2_IRQ() {
     else if (LL_USART_IsActiveFlag_RXNE_RXFNE(USART2)) { // здесь прерывание, если адрес UART совпал
         GPIOB->BSRR = 0x800000; //pB7 // tim interrupter
         communication();
-        LL_USART_RequestRxDataFlush(USART2);   // сбрасывает RXNE флаг (или uint8_t data = LL_USART_ReceiveData8(USART2); сбрасывает) // TODO сброс флагов сделать раньше, чем communication? 
+        LL_USART_RequestRxDataFlush(USART2);   // сбрасывает RXNE флаг (или uint8_t data = LL_USART_ReceiveData8(USART2); сбрасывает)
         LL_USART_RequestEnterMuteMode(USART2); // ставит USART в MuteMode и сбрасывает флаг RWU.
         GPIOB->BSRR = 0x80; //pB7 // tim interrupter
     }
