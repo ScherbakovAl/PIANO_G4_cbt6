@@ -88,6 +88,13 @@ void g4() {
     }
 
     while (1) {
+
+        while (1) {
+            // GPIOB->BSRR = 0x80; // pB7
+            // pause(1);
+            // GPIOB->BSRR = 0x800000;
+            // pause(1);
+        }
         for (uint8_t i = 0; i < 7; ++i) {
 #ifndef CHipForNoteOFF
             if (f[i] != 0) { // for note on
