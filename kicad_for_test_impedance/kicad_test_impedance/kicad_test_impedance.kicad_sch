@@ -1687,7 +1687,7 @@
 				(hide yes)
 			)
 		)
-		(property "Sim.Params" "r=50"
+		(property "Sim.Params" "r=62"
 			(at 169.926 89.154 90)
 			(effects
 				(font
@@ -2041,7 +2041,7 @@
 				(hide yes)
 			)
 		)
-		(property "Sim.Params" "r=50"
+		(property "Sim.Params" "r=62"
 			(at 168.656 67.564 90)
 			(effects
 				(font
@@ -2542,7 +2542,7 @@
 				(hide yes)
 			)
 		)
-		(property "Sim.Params" "r=49"
+		(property "Sim.Params" "r=62"
 			(at 168.656 42.164 90)
 			(effects
 				(font
