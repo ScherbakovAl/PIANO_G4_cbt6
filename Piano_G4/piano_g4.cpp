@@ -235,6 +235,7 @@ void communication() {
         comp[compN_][dot_] = convert8x2to16(a_, b_);
         USART2_Send(compN_, dot_, comp[compN_][dot_]);
         resetData();
+        // TODO установить полученные значения в компараторы, а то приходится переключаться по дисплеям в H7 лишний раз....
     }
 
     if (rx_settings[0] == command::all_calib) {
