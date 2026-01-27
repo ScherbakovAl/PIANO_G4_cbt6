@@ -16,7 +16,7 @@ extern "C" {
     using uint = unsigned int;
     using cuint = const uint;
 
-    #define CHAddr 3
+    #define CHAddr 1
     
     #if CHAddr > 13
     #define CHipForNoteOFF
