@@ -1,0 +1,11 @@
+{
+    "chat.agent.enabled": false,
+    "chat.commandCenter.enabled": false,
+    "chat.notifyWindowOnConfirmation": false,
+    "telemetry.feedback.enabled": false,
+    "C_Cpp.copilotHover": "disabled",
+    "telemetry.editStats.enabled": false,
+    "files.associations": {
+        "random": "cpp"
+    }
+}
