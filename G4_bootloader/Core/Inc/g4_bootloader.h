@@ -21,9 +21,10 @@ extern "C" {
 
 void Unlock();
 void Lock();
-void Erase();
-void Read();
-void Flash(uint32_t Address, uint64_t Data);
+void Erase(uint32_t Page, uint32_t Banks);
+void Flash(uint32_t Address, uint64_t Data, uint32_t size);
+void ReadFromFlash(uint32_t Address, uint8_t* pData, uint32_t Size);
+void ReadIf();
 
 #ifdef __cplusplus
 }
