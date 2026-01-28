@@ -93,47 +93,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   // MX_TIM1_Init(); < чисто, чтобы HAL включился
-  HAL_FLASH_Unlock();
-  uint32_t Address;
-  uint64_t Data;
-  HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, Address, Data);
-  HAL_FLASH_Lock();
-
-  // FLASH READ: 
-  // uint8_t *MEM_If_Read_HS(uint8_t *src, uint8_t *dest, uint32_t Len)
-  // {
-  uint8_t *src; // адрес
-  uint8_t *dest; // результат чтения
-  uint32_t Len = 10; // количество данных
-  uint32_t i = 0; // счётчик
-  uint8_t *psrc = src;
-  for (i = 0; i < Len; i++)
-  {
-    dest[i] = *psrc++;
-  }
-  // return (uint8_t *) (dest);
-  // }
-
-  // или
-
-  	// if ((*(volatile uint32_t*)(Flash_Address + 0x640)) != key_to_change_memory) {
-	// 	SaveToMemory();
-	// }
-	// else {
-	// for (int i = 0; i < sizeCHART_BUFFER; ++i) {
-	// 	compsCHART_0[i] = *(volatile uint32_t*)(Flash_Address + (i * sizeof(uint32_t)));
-	// 	compsCHART_1[i] = *(volatile uint32_t*)(Flash_Address + (i * sizeof(uint32_t)) + 0x320);
-	// }
-
-  // FLASH ERASE:
-  FLASH_EraseInitTypeDef* pEraseInit;
-  pEraseInit->TypeErase = FLASH_TYPEERASE_PAGES;
-  pEraseInit->Banks = FLASH_BANK_2;
-  pEraseInit->Page = 1; // начинать с этой страницы
-  pEraseInit->NbPages = 1; // количество стираемых страниц
-  uint32_t* PageError;
-  HAL_FLASHEx_Erase(pEraseInit, PageError);
-  // FLASH_MassErase(FLASH_BANK_2);
+  g4_bootloader();
 
   /* USER CODE END 2 */
 
