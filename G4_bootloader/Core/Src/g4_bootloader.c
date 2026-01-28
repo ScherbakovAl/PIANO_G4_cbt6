@@ -2,32 +2,34 @@
 
 void g4_bootloader() {
 
+    // 1. Разблокировка Flash
     Unlock();
+    
+    // 2. Стирание страницы (с ожиданием завершения операции)
     Erase();
-    // while (__HAL_FLASH_GET_FLAG(FLASH_FLAG_BSY)) {}
-    // __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
-    // FLASH_WaitForLastOperation(FLASH_TIMEOUT_VALUE);
+    
+    // 3. Блокировка Flash после стирания
     Lock();
-    // __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_OPTVERR | FLASH_FLAG_PROGERR |
-        // FLASH_FLAG_WRPERR | FLASH_FLAG_PGAERR |
-        // FLASH_FLAG_SIZERR | FLASH_FLAG_MISERR);
 
-        // Ждем завершения операции
-    // while (__HAL_FLASH_GET_FLAG(FLASH_FLAG_BSY)) {__NOP();}
-    // FLASH_WaitForLastOperation(FLASH_TIMEOUT_VALUE);
-    // while (FLASH_GetBusyState() != RESET) {}
-    // LL_mDelay(100);
-    // while (__HAL_FLASH_GET_FLAG(FLASH_FLAG_BSY1)) {}
-
+    // 4. Разблокировка Flash для записи
     Unlock();
-    // __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
-    // FLASH_WaitForLastOperation(FLASH_TIMEOUT_VALUE);
-    int adress = 0x0800A000; // 0x08009FF0 - смотреть с этого // с адреса 0x0804 0000 - bank2
+
+    // ВАЖНО: Адрес для DOUBLEWORD должен быть выровнен по 8 байт!
+    uint32_t address = 0x0800A000; // 0x08009FF0 - смотреть с этого // с адреса 0x0804 0000 - bank2
     uint64_t data = 0xFAFBECEDABAC8888;
-    for (int i = 0; i < 0xFF; ++i) {
-        Flash(adress++, data);
-    }
-    // FLASH_WaitForLastOperation(FLASH_TIMEOUT_VALUE);
+    
+    // КРИТИЧНО: При записи DOUBLEWORD адрес увеличивается на 8 байт (размер uint64_t), а не на 1!
+    // for (int i = 0; i < 0xFF; ++i) {
+        Flash(address, data);
+        address += 8;  // Увеличиваем адрес на 8 байт (размер DOUBLEWORD)
+        data = 0xFAFBECEDABAC1111;
+        Flash(address, data);
+                address += 8;  // Увеличиваем адрес на 8 байт (размер DOUBLEWORD)
+        data = 0xFAFBECEDABAC2222;
+        Flash(address, data);
+    // }
+
+    // 5. Блокировка Flash после записи
     Lock();
 
 
@@ -48,47 +50,6 @@ void g4_bootloader() {
 // if (*(__IO uint32_t*)address != data[0]) {
     // Ошибка записи
 // }
-
-// Функция чтения
-// void ReadFromFlash(uint64_t* buffer, uint32_t size) {
-//     uint64_t* addr = (uint64_t*)FLASH_USER_START_ADDR;
-//     for (uint32_t i = 0; i < size; i++) {
-//         buffer[i] = addr[i];
-//     }
-// }
-
-
-// пржок как пример:
-// #define APP_START_ADDR 0x08010000
-
-// typedef void (*pFunction)(void);
-// pFunction JumpToApplication;
-
-// void JumpToUserApp(void) {
-//     uint32_t jump_address = *(__IO uint32_t*)(APP_START_ADDR + 4);
-
-//     // Проверка стека (указатель должен быть в пределах RAM)
-//     if ((*(__IO uint32_t*)APP_START_ADDR & 0x2FFE0000) == 0x20000000) {
-//         // Деинициализация периферии
-//         HAL_RCC_DeInit();
-//         HAL_DeInit();
-
-//         // Отключение прерываний
-//         __disable_irq();
-
-//         // Установка нового вектора прерываний
-//         SCB->VTOR = APP_START_ADDR;
-
-//         // Установка указателя стека
-//         __set_MSP(*(__IO uint32_t*)APP_START_ADDR);
-
-//         // Получение адреса Reset_Handler
-//         JumpToApplication = (pFunction)jump_address;
-
-//         // Переход в приложение
-//         JumpToApplication();
-//     }
-// }
 // .......................................................
 
     while (1) {}
@@ -103,15 +64,17 @@ void Lock() {
 }
 
 void Erase() {
-    // FLASH_EraseInitTypeDef* pp;
-    // pp->TypeErase = FLASH_TYPEERASE_PAGES;
-    // pp->Banks = FLASH_BANK_1;
-    // pp->Page = 19; // начинать с этой страницы
-    // pp->NbPages = 4; // количество стираемых страниц
-    // uint32_t* PError = 0;
-    // HAL_FLASHEx_Erase(pp, PError);
-    // // FLASH_MassErase(FLASH_BANK_2);
+    // Использование низкоуровневой функции FLASH_PageErase требует ручного управления!
     FLASH_PageErase(20, FLASH_BANK_1);
+    
+    // КРИТИЧНО: Необходимо дождаться завершения операции стирания!
+    FLASH_WaitForLastOperation(FLASH_TIMEOUT_VALUE);
+    
+    // КРИТИЧНО: Очистить биты управления стиранием (PER и PNB)
+    CLEAR_BIT(FLASH->CR, (FLASH_CR_PER | FLASH_CR_PNB));
+    
+    // Очистить флаги ошибок, если они есть
+    __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
 }
 
 void Read() {
@@ -142,25 +105,18 @@ void Read() {
 }
 
 void Flash(uint32_t Address, uint64_t Data) {
-    HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, Address, Data); // FLASH_TYPEPROGRAM_DOUBLEWORD FLASH_TYPEPROGRAM_FAST FLASH_TYPEPROGRAM_FAST_AND_LAST
+    // ВАЖНО: Проверяем, что адрес выровнен по 8 байт для DOUBLEWORD
+    if (Address % 8 != 0) {
+        // Ошибка выравнивания! Адрес должен быть кратен 8
+        return;
+    }
+    
+    // Выполняем запись с проверкой статуса
+    HAL_StatusTypeDef status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, Address, Data);
+    
+    // Можно проверить статус и обработать ошибку:
+    // if (status != HAL_OK) {
+    //     // Обработка ошибки записи
+    //     uint32_t error = HAL_FLASH_GetError();
+    // }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
