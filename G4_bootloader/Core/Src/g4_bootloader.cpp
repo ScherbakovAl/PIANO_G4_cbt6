@@ -1,54 +1,114 @@
 #include "g4_bootloader.h"
 
+uint8_t ChipN[1] = { 1 }; // <<<<< номер чипа указать здесь (который запишется в FLASH в первый раз)
+volatile uint8_t ChipNumber[1] = {}; // <<<<< номер чипа - использовать в коде
+const int ADRESS_CHIP_NUMBER = 0x08009800; // Page 19, BANK_1 // здесь храним номер чипа
+
+
+// уточнить здесь адрес, где будет находится прошивка. Выяснить страницу и банк
+#define MAIN_FIRMWARE 0x08010000 // здесь основная прошивка // TODO 
+
+// bin_data
+uint8_t bin_data[2048] = {}; // массив для получения прошивки
+const int bin_data_length = sizeof(bin_data);
+
+// settings
+uint8_t tx_settings[5] = { };
+const int tx_settings_length = sizeof(tx_settings);
+uint8_t rx_settings[5] = { };
+const int rx_settings_length = sizeof(rx_settings);
+uint8_t t1 = 0;
+uint8_t t2 = 0;
+uint8_t t3 = 0;
+uint8_t t4 = 0;
+
 void g4_bootloader() {
 
+    // считываем номер чипа из памяти (или если надо записываем)
+    // Erase(19, FLASH_BANK_1); // очистить номер чипа, если надо обновить номер
+    Read(ADRESS_CHIP_NUMBER, const_cast<uint8_t*>(ChipNumber), 1u);
+    if (ChipNumber[0] == 0xFF) {
+        Erase(19, FLASH_BANK_1); // очистить номер чипа
+        Flash(ADRESS_CHIP_NUMBER, reinterpret_cast<uint64_t*>(ChipN), 1u);
+        ChipNumber[0] = ChipN[0];
+    }
 
-    // BANK_1 -  0 to page 31
-    Erase(20, FLASH_BANK_1);
-    Erase(21, FLASH_BANK_1);
-    Erase(22, FLASH_BANK_1);
-    Erase(23, FLASH_BANK_1);
+    // UART init
+    LL_USART_DisableDirectionTx(USART2); // один или несколько MCU должны быть подтянуты к pull_UP ! // надо ли? проверить..
+    LL_USART_Disable(USART2);            // // надо ли? проверить..
+    LL_USART_ConfigNodeAddress(USART2, LL_USART_ADDRESS_DETECT_7B, ChipNumber[0]);
+    LL_USART_ClearFlag_TC(USART2);
+    LL_USART_EnableIT_RXNE_RXFNE(USART2);  // включение прерывания по приему данных
+    LL_USART_EnableMuteMode(USART2);       // включение MuteMode
+    LL_USART_RequestEnterMuteMode(USART2); // ставит USART в MuteMode и сбрасывает флаг RWU.
+    LL_USART_Enable(USART2);
+    LL_USART_DisableDirectionTx(USART2);   // один или несколько MCU должны быть подтянуты к pull_UP !
+    //---------------------------------
+
+    tx_settings[0] = ChipNumber[0];
+    rx_settings[0] = ChipNumber[0];
 
 
-    // ВАЖНО: Адрес для DOUBLEWORD должен быть выровнен по 8 байт!
-    uint32_t addressIN = 0x08000000; // 0x08009FF0 - смотреть с этого // с адреса 0x0804 0000 - bank2
-    uint32_t addressOUT = 0x0800A000;
-    // uint64_t data = 0xFAFBECEDABAC8888;
 
-    // uint64_t data[4] = {
-    //     0x1122334455667788,  // В памяти: 0x88 0x77 0x66 0x55 0x44 0x33 0x22 0x11
-    //     0x8877665544332211,  // В памяти: 0x11 0x22 0x33 0x44 0x55 0x66 0x77 0x88
-    //     0xAABBCCDDFEFE0011,  // В памяти: 0x11 0x00 0xFF 0xEE 0xDD 0xCC 0xBB 0xAA
-    //     0x11FFEEDDCCBBAA00   // В памяти: 0x00 0xAA 0xBB 0xCC 0xDD 0xEE 0xFF 0x11
-    // };
-
-    // uint32_t data[4] = {
-    // 0x12345678,  // В памяти: 0x88 0x77 0x66 0x55 0x44 0x33 0x22 0x11
-    // 0x87654321,  // В памяти: 0x11 0x22 0x33 0x44 0x55 0x66 0x77 0x88
-    // 0xABCDEF11,  // В памяти: 0x11 0x00 0xFF 0xEE 0xDD 0xCC 0xBB 0xAA
-    // 0x22FEDCBA   // В памяти: 0x00 0xAA 0xBB 0xCC 0xDD 0xEE 0xFF 0x11
-    // };
-
-    // uint16_t data[4] = {
-    // 0x1234,  // В памяти: 0x88 0x77 0x66 0x55 0x44 0x33 0x22 0x11
-    // 0x8765,  // В памяти: 0x11 0x22 0x33 0x44 0x55 0x66 0x77 0x88
-    // 0xABCD,  // В памяти: 0x11 0x00 0xFF 0xEE 0xDD 0xCC 0xBB 0xAA
-    // 0x22FE   // В памяти: 0x00 0xAA 0xBB 0xCC 0xDD 0xEE 0xFF 0x11
-    // };
-
-    // uint8_t data[4] = {
-    // 0x12,  // В памяти: 0x88 0x77 0x66 0x55 0x44 0x33 0x22 0x11
-    // 0x34,  // В памяти: 0x11 0x22 0x33 0x44 0x55 0x66 0x77 0x88
-    // 0x56,  // В памяти: 0x11 0x00 0xFF 0xEE 0xDD 0xCC 0xBB 0xAA
-    // 0x78   // В памяти: 0x00 0xAA 0xBB 0xCC 0xDD 0xEE 0xFF 0x11
-    // };
-
-    // Записываем весь массив за один вызов
-    // size = количество элементов * размер элемента = 4 * 8 = 32 байта
-    // Flash(addressOUT, addressIN, 0x12A8);
 
     while (1) {}
 }
+
+void USART2_IRQ() {
+    if (LL_USART_IsActiveFlag_RXNE_RXFNE(USART2)) { // здесь прерывание, если адрес UART совпал
+        communication();
+        LL_USART_RequestRxDataFlush(USART2);   // сбрасывает RXNE флаг
+        LL_USART_RequestEnterMuteMode(USART2); // ставит USART в MuteMode и сбрасывает флаг RWU.
+    }
+}
+
+void communication() {
+    USART2_Receive_settings();
+    const uint8_t rx_command = rx_settings[0];
+    if (rx_command == command::reset) {
+        Reset();
+    }
+
+    if (rx_command == command::jump_to_piano_g4) {
+        Jump_to_app();
+    }
+
+}
+
+// UART Send-Recive
+void USART2_Send_settings(const uint8_t* compN, const uint8_t* dot, const int* value) {
+    LL_USART_EnableDirectionTx(USART2); // отправлять только при ВЫКЛюченных остальных слэйв-трансляторах.. иначе замыкание
+    // conv16to8x2 c;
+    // c = convert16to8x2(value);
+    // tx_settings[1] = { compN };
+    // tx_settings[2] = { dot };
+    // tx_settings[3] = c.a;
+    // tx_settings[4] = c.b;
+    while (!LL_USART_IsActiveFlag_TXE(USART2)) {}
+    for (int i = 0; i < tx_settings_length; i++) {
+        LL_USART_TransmitData9(USART2, tx_settings[i]);
+        while (!LL_USART_IsActiveFlag_TXE(USART2)) {}
+    }
+    while (!LL_USART_IsActiveFlag_TC(USART2)) {}
+    LL_USART_DisableDirectionTx(USART2);
+    LL_USART_ClearFlag_TC(USART2);
+}
+
+void USART2_Receive_settings() {
+    while (!LL_USART_IsActiveFlag_RXNE(USART2)) {}
+    rx_settings[0] = LL_USART_ReceiveData9(USART2);
+    for (int i = 0; i < rx_settings_length; i++) {
+        while (!LL_USART_IsActiveFlag_RXNE(USART2)) {}
+        rx_settings[i] = LL_USART_ReceiveData9(USART2);
+    }
+    t1 = rx_settings[1];
+    t2 = rx_settings[2];
+    t3 = rx_settings[3];
+    t4 = rx_settings[4];
+    LL_USART_RequestRxDataFlush(USART2);
+    LL_USART_RequestEnterMuteMode(USART2);
+}
+//---------------------------------
 
 void Unlock() {
     HAL_FLASH_Unlock();
@@ -151,6 +211,19 @@ void Read(uint32_t Address, uint8_t* pData, uint32_t Size) {
     }
 }
 
+void Reset() {
+    // LL_mDelay(20); // ?
+    NVIC_SystemReset();
+}
+
+void Jump_to_app() {
+    void (*JumpToApplication)(void);
+    uint32_t JumpAddress;
+    JumpAddress = *(__IO uint32_t*) (MAIN_FIRMWARE + 4); // здесь должно быть " + 4 ", а в скрипте компоновщика " - 8 " !!
+    JumpToApplication = (void*)JumpAddress;
+    JumpToApplication();
+}
+
 /**
  * @brief  Определяет страницу и банк памяти Flash для заданного диапазона адресов
  * @param  Address: Начальный адрес диапазона данных
@@ -222,18 +295,55 @@ FlashPageInfo_t GetPageAndBank(uint32_t Address, uint32_t Size) {
     return info;
 }
 
-// void ReadIf() {
-      // if ((*(volatile uint32_t*)(Flash_Address + 0x640)) != key_to_change_memory) {
-      // 	SaveToMemory();
-      // }
-      // else {
-      // for (int i = 0; i < sizeCHART_BUFFER; ++i) {
-      // 	compsCHART_0[i] = *(volatile uint32_t*)(Flash_Address + (i * sizeof(uint32_t)));
-      // 	compsCHART_1[i] = *(volatile uint32_t*)(Flash_Address + (i * sizeof(uint32_t)) + 0x320);
-      // }
-// }
-
 // пометочки..
+// .......................................................
+    // BANK_1 -  0 to page 31
+    // Erase(20, FLASH_BANK_1);
+    // Erase(21, FLASH_BANK_1);
+    // Erase(22, FLASH_BANK_1);
+    // Erase(23, FLASH_BANK_1);
+
+    // ВАЖНО: Адрес для DOUBLEWORD должен быть выровнен по 8 байт!
+    // uint32_t addressIN = 0x08000000; // 0x08009FF0 - смотреть с этого // с адреса 0x0804 0000 - bank2
+    // uint32_t addressOUT = 0x0800A000;
+    // uint64_t data = 0xFAFBECEDABAC8888;
+
+    // uint64_t data[4] = {
+    //     0x1122334455667788,  // В памяти: 0x88 0x77 0x66 0x55 0x44 0x33 0x22 0x11
+    //     0x8877665544332211,  // В памяти: 0x11 0x22 0x33 0x44 0x55 0x66 0x77 0x88
+    //     0xAABBCCDDFEFE0011,  // В памяти: 0x11 0x00 0xFF 0xEE 0xDD 0xCC 0xBB 0xAA
+    //     0x11FFEEDDCCBBAA00   // В памяти: 0x00 0xAA 0xBB 0xCC 0xDD 0xEE 0xFF 0x11
+    // };
+
+    // uint32_t data[4] = {
+    // 0x12345678,  // В памяти: 0x88 0x77 0x66 0x55 0x44 0x33 0x22 0x11
+    // 0x87654321,  // В памяти: 0x11 0x22 0x33 0x44 0x55 0x66 0x77 0x88
+    // 0xABCDEF11,  // В памяти: 0x11 0x00 0xFF 0xEE 0xDD 0xCC 0xBB 0xAA
+    // 0x22FEDCBA   // В памяти: 0x00 0xAA 0xBB 0xCC 0xDD 0xEE 0xFF 0x11
+    // };
+
+    // uint16_t data[4] = {
+    // 0x1234,  // В памяти: 0x88 0x77 0x66 0x55 0x44 0x33 0x22 0x11
+    // 0x8765,  // В памяти: 0x11 0x22 0x33 0x44 0x55 0x66 0x77 0x88
+    // 0xABCD,  // В памяти: 0x11 0x00 0xFF 0xEE 0xDD 0xCC 0xBB 0xAA
+    // 0x22FE   // В памяти: 0x00 0xAA 0xBB 0xCC 0xDD 0xEE 0xFF 0x11
+    // };
+
+    // uint8_t data[4] = {
+    // 0x12,  // В памяти: 0x88 0x77 0x66 0x55 0x44 0x33 0x22 0x11
+    // 0x34,  // В памяти: 0x11 0x22 0x33 0x44 0x55 0x66 0x77 0x88
+    // 0x56,  // В памяти: 0x11 0x00 0xFF 0xEE 0xDD 0xCC 0xBB 0xAA
+    // 0x78   // В памяти: 0x00 0xAA 0xBB 0xCC 0xDD 0xEE 0xFF 0x11
+    // };
+
+    // Записываем весь массив за один вызов
+    // size = количество элементов * размер элемента = 4 * 8 = 32 байта
+    // Flash(addressOUT, addressIN, 0x12A8);
+// .......................................................
+
+
+
+// пометочки 2..
 // .......................................................
 // Адрес должен быть кратен 32 байтам (256 бит)
 // __ALIGNED(32) uint32_t data[8]; // Для FLASHWORD
@@ -251,6 +361,16 @@ FlashPageInfo_t GetPageAndBank(uint32_t Address, uint32_t Size) {
 //     }
 // }
 
+// void ReadIf() {
+      // if ((*(volatile uint32_t*)(Flash_Address + 0x640)) != key_to_change_memory) {
+      // 	SaveToMemory();
+      // }
+      // else {
+      // for (int i = 0; i < sizeCHART_BUFFER; ++i) {
+      // 	compsCHART_0[i] = *(volatile uint32_t*)(Flash_Address + (i * sizeof(uint32_t)));
+      // 	compsCHART_1[i] = *(volatile uint32_t*)(Flash_Address + (i * sizeof(uint32_t)) + 0x320);
+      // }
+// }
 
 // прыжок как пример:
 // #define APP_START_ADDR 0x08010000
