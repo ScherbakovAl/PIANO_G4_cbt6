@@ -7,5 +7,6 @@
     "telemetry.editStats.enabled": false,
     "files.associations": {
         "random": "cpp"
-    }
+    },
+    "cortex-debug.variableUseNaturalFormat": false
 }

@@ -1,6 +1,6 @@
 #include "g4_bootloader.h"
 
-uint8_t ChipN[1] = { 1 }; // <<<<< номер чипа указать здесь (который запишется в FLASH в первый раз)
+uint8_t ChipN[1] = { 0x35 }; // <<<<< номер чипа указать здесь (который запишется в FLASH в первый раз)
 volatile uint8_t ChipNumber[1] = {}; // <<<<< номер чипа - использовать в коде
 const uint32_t ADRESS_CHIP_NUMBER = 0x08003800; // здесь храним номер чипа
 
@@ -12,16 +12,19 @@ uint8_t bin_data[2048] = {}; // массив для получения прош�
 const uint32_t bin_data_length = sizeof(bin_data);
 
 // settings
-uint8_t tx_settings[5] = { };
-const int tx_settings_length = sizeof(tx_settings);
-uint8_t rx_settings[5] = { };
-const int rx_settings_length = sizeof(rx_settings);
+uint8_t tx_s[5] = { };
+const int tx_settings_length = sizeof(tx_s);
+uint8_t rx_s[5] = { };
+const int rx_settings_length = sizeof(rx_s);
 
 void g4_bootloader() {
 
     // считываем номер чипа из памяти (или если надо записываем)
-    // FlashPageInfo_t info = GetPageAndBank(ADRESS_CHIP_NUMBER, 1);
-    // Erase(info.start_page, info.bank); // очистить номер чипа, если надо обновить номер
+    // #define testt
+#ifdef testt
+    FlashPageInfo_t info = GetPageAndBank(ADRESS_CHIP_NUMBER, 1);
+    Erase(info.start_page, info.bank); // очистить номер чипа, если надо обновить номер
+#endif
     Read(ADRESS_CHIP_NUMBER, const_cast<uint8_t*>(ChipNumber), 1u);
     if (ChipNumber[0] == 0xFF) {
         FlashPageInfo_t info = GetPageAndBank(ADRESS_CHIP_NUMBER, 1);
@@ -43,8 +46,8 @@ void g4_bootloader() {
     LL_USART_DisableDirectionTx(USART2);   // один или несколько MCU должны быть подтянуты к pull_UP !
     //---------------------------------
 
-    tx_settings[0] = ChipNumber[0];
-    rx_settings[0] = ChipNumber[0];
+    tx_s[0] = ChipNumber[0];
+    rx_s[0] = ChipNumber[0];
 
 
 
@@ -55,14 +58,17 @@ void g4_bootloader() {
 void USART2_IRQ() {
     if (LL_USART_IsActiveFlag_RXNE_RXFNE(USART2)) { // здесь прерывание, если адрес UART совпал
         communication();
-        LL_USART_RequestRxDataFlush(USART2);   // сбрасывает RXNE флаг
+        // LL_USART_RequestRxDataFlush(USART2);   // сбрасывает RXNE флаг
         LL_USART_RequestEnterMuteMode(USART2); // ставит USART в MuteMode и сбрасывает флаг RWU.
     }
 }
 
+void USART2_Receive_settings2();
+
 void communication() {
+
     USART2_Receive_settings();
-    const uint8_t rx_command = rx_settings[0];
+    const uint8_t rx_command = rx_s[0];
 
     if (rx_command == command::reset) {
 
@@ -76,34 +82,32 @@ void communication() {
         Jump_to_app();
     }
 
-    if (rx_command == command::set_number) {
+    if (rx_command == command::set_number) { // ok
 
-        Set_N(rx_settings[1]);
-        tx_settings[1] = ChipNumber[0];
+        Set_N(rx_s[1]);
+        Set_tx_s(0, ChipNumber[0], 0, 0, 0);
+        USART2_Send_settings();
+        Set_tx_s(0, LL_USART_GetNodeAddress(USART2), 0, 0, 0);
         USART2_Send_settings();
     }
 
-    if (rx_command == command::data_from_H7_to_array_g4) {
+    if (rx_command == command::data_from_H7_to_array_g4) { // TODO
 
         From_H7_to_array_g4();
     }
 
-    if (rx_command == command::data_from_array_g4_to_H7) {
+    if (rx_command == command::data_from_array_g4_to_H7) { // TODO
 
         From_array_g4_to_H7();
     }
 
-    if (rx_command == command::copy_array_to_flash) {
+    if (rx_command == command::copy_array_to_flash) { // TODO
 
         Copy_array_to_flash();
     }
 
-    if (rx_command == command::echo) {
-        tx_settings[0] = ChipNumber[0];
-        tx_settings[1] = ChipNumber[0];
-        tx_settings[2] = ChipNumber[0];
-        tx_settings[3] = ChipNumber[0];
-        tx_settings[4] = ChipNumber[0];
+    if (rx_command == command::echo) { // ok
+        Set_tx_s(0, ChipNumber[0], 0, 0, 0);
         USART2_Send_settings();
     }
 }
@@ -113,7 +117,7 @@ void USART2_Send_settings() {
     LL_USART_EnableDirectionTx(USART2); // отправлять только при ВЫКЛюченных остальных слэйв-трансляторах.. иначе замыкание
     while (!LL_USART_IsActiveFlag_TXE(USART2)) {}
     for (int i = 0; i < tx_settings_length; i++) {
-        LL_USART_TransmitData9(USART2, tx_settings[i]);
+        LL_USART_TransmitData9(USART2, tx_s[i]);
         while (!LL_USART_IsActiveFlag_TXE(USART2)) {}
     }
     while (!LL_USART_IsActiveFlag_TC(USART2)) {}
@@ -123,13 +127,14 @@ void USART2_Send_settings() {
 
 void USART2_Send_responce(response r) {
     LL_USART_EnableDirectionTx(USART2); // отправлять только при ВЫКЛюченных остальных слэйв-трансляторах.. иначе замыкание
-    tx_settings[1] = r;
-    tx_settings[2] = r;
-    tx_settings[3] = r;
-    tx_settings[4] = r;
+    tx_s[0] = ChipNumber[0];
+    tx_s[1] = r;
+    tx_s[2] = r;
+    tx_s[3] = r;
+    tx_s[4] = r;
     while (!LL_USART_IsActiveFlag_TXE(USART2)) {}
     for (int i = 0; i < tx_settings_length; i++) {
-        LL_USART_TransmitData9(USART2, tx_settings[i]);
+        LL_USART_TransmitData9(USART2, tx_s[i]);
         while (!LL_USART_IsActiveFlag_TXE(USART2)) {}
     }
     while (!LL_USART_IsActiveFlag_TC(USART2)) {}
@@ -139,13 +144,24 @@ void USART2_Send_responce(response r) {
 
 void USART2_Receive_settings() {
     while (!LL_USART_IsActiveFlag_RXNE(USART2)) {}
-    rx_settings[0] = LL_USART_ReceiveData9(USART2);
+    rx_s[0] = LL_USART_ReceiveData9(USART2);
     for (int i = 0; i < rx_settings_length; i++) {
         while (!LL_USART_IsActiveFlag_RXNE(USART2)) {}
-        rx_settings[i] = LL_USART_ReceiveData9(USART2);
+        rx_s[i] = LL_USART_ReceiveData9(USART2);
     }
-    LL_USART_RequestRxDataFlush(USART2);
-    LL_USART_RequestEnterMuteMode(USART2);
+    // LL_USART_RequestRxDataFlush(USART2);
+    // LL_USART_RequestEnterMuteMode(USART2);
+}
+
+void USART2_Receive_settings2() {
+    while (!LL_USART_IsActiveFlag_RXNE(USART2)) {}
+    // rx_s[0] = LL_USART_ReceiveData9(USART2);
+    for (int i = 0; i < rx_settings_length; i++) {
+        while (!LL_USART_IsActiveFlag_RXNE(USART2)) {}
+        rx_s[i] = LL_USART_ReceiveData9(USART2);
+    }
+    // LL_USART_RequestRxDataFlush(USART2);
+    // LL_USART_RequestEnterMuteMode(USART2);
 }
 //---------------------------------
 
@@ -258,7 +274,7 @@ void Reset() {
 void Jump_to_app() {
     // HAL_RCC_DeInit(); // TODO это надо?
     // HAL_DeInit(); // TODO это надо?
-    __disable_irq(); // TODO это надо?
+    // __disable_irq(); // TODO это надо?
 
     // Установка нового вектора прерываний
     SCB->VTOR = MAIN_FIRMWARE; // TODO это надо?
@@ -277,29 +293,38 @@ void Set_N(const int n) {
     ChipNumber[0] = 0;
     FlashPageInfo_t info = GetPageAndBank(ADRESS_CHIP_NUMBER, 1);
     Erase(info.start_page, info.bank); // очистить номер чипа
-    Flash(ADRESS_CHIP_NUMBER, reinterpret_cast<uint64_t*>(n), 1u);
-    Read(ADRESS_CHIP_NUMBER, const_cast<uint8_t*>(ChipNumber), 1u);
+    uint64_t vrem[1] = { (uint64_t)n };
+    Flash(ADRESS_CHIP_NUMBER, vrem, 1u);
+    Read(ADRESS_CHIP_NUMBER, (uint8_t*)ChipNumber, 1u);
     LL_USART_Disable(USART2);
     LL_USART_ConfigNodeAddress(USART2, LL_USART_ADDRESS_DETECT_7B, ChipNumber[0]);
     LL_USART_Enable(USART2);
 }
 
 void From_H7_to_array_g4() {
-    for (int i = 0; i < bin_data_length;) {
-        USART2_Receive_settings();
-        // bin_data[i++] = r1;
-        // bin_data[i++] = r2;
-        // bin_data[i++] = r3;
-        // bin_data[i++] = r4;
-        *reinterpret_cast<uint32_t*>(bin_data[i]) = *reinterpret_cast<uint32_t*>(rx_settings[i + 1]);
-        i += 4;
+
+    Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает то, что получил
+    USART2_Send_settings();
+    // LL_USART_RequestRxDataFlush(USART2);   // сбрасывает RXNE флаг
+    // uint8_t data = LL_USART_ReceiveData9(USART2);
+
+
+    for (uint32_t i = 0; i < bin_data_length;) {
+        USART2_Receive_settings2();
+        bin_data[i++] = rx_s[1];
+        bin_data[i++] = rx_s[2];
+        bin_data[i++] = rx_s[3];
+        bin_data[i++] = rx_s[4];
+        Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает то, что получил
+        USART2_Send_settings();
     }
     USART2_Send_responce(response::ok);
+
 }
 
 void From_array_g4_to_H7() {
     for (int i = 0; i < bin_data_length;) {
-        *reinterpret_cast<uint32_t*>(rx_settings[i + 1]) = *reinterpret_cast<uint32_t*>(bin_data[i]);
+        *reinterpret_cast<uint32_t*>(rx_s[i + 1]) = *reinterpret_cast<uint32_t*>(bin_data[i]);
         USART2_Send_settings();
         i += 4;
     }
@@ -309,11 +334,11 @@ void From_array_g4_to_H7() {
 void Copy_array_to_flash() {
     // получить адрес для памяти, куда сохранить массив
     USART2_Receive_settings();
-    *reinterpret_cast<uint32_t*>(tx_settings[1]) = *reinterpret_cast<uint32_t*>(rx_settings[1]);
+    *reinterpret_cast<uint32_t*>(tx_s[1]) = *reinterpret_cast<uint32_t*>(rx_s[1]);
     USART2_Send_settings();
     USART2_Receive_settings();
-    if (rx_settings[1] == response::ok) {
-        const uint32_t addr = *reinterpret_cast<uint32_t*>(tx_settings[1]);
+    if (rx_s[1] == response::ok) {
+        const uint32_t addr = *reinterpret_cast<uint32_t*>(tx_s[1]);
         FlashPageInfo_t info = GetPageAndBank(addr, bin_data_length);
         Erase(info.start_page, info.bank);
         Flash(addr, reinterpret_cast<uint64_t*>(bin_data), bin_data_length);
@@ -328,6 +353,14 @@ void Copy_array_to_flash() {
         }
         USART2_Send_responce(response::ok);
     }
+}
+
+void Set_tx_s(uint8_t a, uint8_t b, uint8_t c, uint8_t d, uint8_t e) {
+    tx_s[0] = a;
+    tx_s[1] = b;
+    tx_s[2] = c;
+    tx_s[3] = d;
+    tx_s[4] = e;
 }
 
 /**

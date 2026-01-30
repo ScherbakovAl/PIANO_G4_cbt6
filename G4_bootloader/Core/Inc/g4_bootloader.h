@@ -30,8 +30,8 @@ enum command {
 };
 
 enum response {
-    ok = 203,
-    fail = 153
+    ok = 0xCB,
+    fail = 0x99
 };
 
 // Структура для хранения информации о странице и банке
@@ -57,6 +57,7 @@ void Set_N(const int n);
 void From_H7_to_array_g4();
 void From_array_g4_to_H7();
 void Copy_array_to_flash();
+void Set_tx_s(uint8_t a, uint8_t b, uint8_t c, uint8_t d, uint8_t e);
 FlashPageInfo_t GetPageAndBank(uint32_t Address, uint32_t Size);
 // void ReadIf();
 
