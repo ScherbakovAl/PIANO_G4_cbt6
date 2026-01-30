@@ -91,12 +91,12 @@ void communication() {
         USART2_Send_settings();
     }
 
-    if (rx_command == command::data_from_H7_to_array_g4) { // TODO
+    if (rx_command == command::data_from_H7_to_array_g4) { // ок
 
         From_H7_to_array_g4();
     }
 
-    if (rx_command == command::data_from_array_g4_to_H7) { // TODO
+    if (rx_command == command::data_from_array_g4_to_H7) { // --
 
         From_array_g4_to_H7();
     }
@@ -323,34 +323,78 @@ void From_H7_to_array_g4() {
 }
 
 void From_array_g4_to_H7() {
-    for (int i = 0; i < bin_data_length;) {
-        *reinterpret_cast<uint32_t*>(rx_s[i + 1]) = *reinterpret_cast<uint32_t*>(bin_data[i]);
-        USART2_Send_settings();
-        i += 4;
-    }
-    USART2_Send_responce(response::ok);
+    // for (int i = 0; i < bin_data_length;) {
+    //     *reinterpret_cast<uint32_t*>(rx_s[i + 1]) = *reinterpret_cast<uint32_t*>(bin_data[i]);
+    //     USART2_Send_settings();
+    //     i += 4;
+    // }
+    // USART2_Send_responce(response::ok);
 }
 
+
+#include <cstring>
+
+void uint32_to_bytes_safe(uint32_t value, uint8_t* bytes) {
+    memcpy(bytes, &value, sizeof(value));
+}
+
+uint32_t bytes_to_uint32_safe(const uint8_t* bytes) {
+    uint32_t result;
+    memcpy(&result, bytes, sizeof(result));
+    return result;
+}
+
+
 void Copy_array_to_flash() {
-    // получить адрес для памяти, куда сохранить массив
-    USART2_Receive_settings();
-    *reinterpret_cast<uint32_t*>(tx_s[1]) = *reinterpret_cast<uint32_t*>(rx_s[1]);
+
+    Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает 0x11 0x12 0x13 0x14
     USART2_Send_settings();
-    USART2_Receive_settings();
-    if (rx_s[1] == response::ok) {
-        const uint32_t addr = *reinterpret_cast<uint32_t*>(tx_s[1]);
+
+    // **  ****  ****  ****  ****  ****  ****  ****  ****  **
+
+
+    // 1 получить адрес для памяти, куда сохранить массив
+    USART2_Receive_settings2();
+
+
+    // 2 послать адрес в ответ на проверку
+    Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает форматированным адресом
+    // *reinterpret_cast<uint32_t*>(tx_s[1]) = *reinterpret_cast<uint32_t*>(rx_s[1]);
+    USART2_Send_settings();
+
+
+    // 3 если ок, то записываем в память..
+    USART2_Receive_settings2();
+
+
+
+
+
+
+    int bug = 0;
+    if (rx_s[0] == response::ok) {
+        const uint32_t addr = 0x08008000;
         FlashPageInfo_t info = GetPageAndBank(addr, bin_data_length);
         Erase(info.start_page, info.bank);
         Flash(addr, reinterpret_cast<uint64_t*>(bin_data), bin_data_length);
+
+        // 3.5
+        USART2_Send_responce(response::ok);
 
         uint8_t test[1] = {};
         for (uint32_t i = 0; i < bin_data_length; ++i) {
             Read(addr + i, const_cast<uint8_t*>(test), 1u);
             if (bin_data[i] != test[0]) {
-                USART2_Send_responce(response::fail);
-                return;
+                ++bug;
             }
         }
+    }
+
+    // 4
+    if (bug) {
+        USART2_Send_responce(response::fail);
+    }
+    else {
         USART2_Send_responce(response::ok);
     }
 }
