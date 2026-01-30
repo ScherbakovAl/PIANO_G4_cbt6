@@ -2,14 +2,10 @@
 
 uint8_t ChipN[1] = { 1 }; // <<<<< номер чипа указать здесь (который запишется в FLASH в первый раз)
 volatile uint8_t ChipNumber[1] = {}; // <<<<< номер чипа - использовать в коде
-const uint32_t ADRESS_CHIP_NUMBER = 0x08009800; // Page 19, BANK_1 // здесь храним номер чипа
-const uint32_t PAGE_CHIP = 19;
-const uint32_t BANK_N_CHIP = FLASH_BANK_1;
+const uint32_t ADRESS_CHIP_NUMBER = 0x08003800; // здесь храним номер чипа
 
-// уточнить здесь адрес, где будет находится прошивка. Выяснить страницу и банк
+// уточнить здесь адрес, где будет находится прошивка
 const uint32_t MAIN_FIRMWARE = 0x08010000; // здесь основная прошивка // TODO MAIN_FIRMWARE?
-const uint32_t PAGE_FIRMWARE = 19; // TODO PAGE_FIRMWARE?
-const uint32_t BANK_FIRMWARE = FLASH_BANK_1; // TODO BANK_FIRMWARE?
 
 // bin_data
 uint8_t bin_data[2048] = {}; // массив для получения прошивки
@@ -24,10 +20,13 @@ const int rx_settings_length = sizeof(rx_settings);
 void g4_bootloader() {
 
     // считываем номер чипа из памяти (или если надо записываем)
-    // Erase(19, FLASH_BANK_1); // очистить номер чипа, если надо обновить номер
+    // FlashPageInfo_t info = GetPageAndBank(ADRESS_CHIP_NUMBER, 1);
+    // Erase(info.start_page, info.bank); // очистить номер чипа, если надо обновить номер
     Read(ADRESS_CHIP_NUMBER, const_cast<uint8_t*>(ChipNumber), 1u);
     if (ChipNumber[0] == 0xFF) {
-        Erase(PAGE_CHIP, BANK_N_CHIP); // очистить номер чипа
+        FlashPageInfo_t info = GetPageAndBank(ADRESS_CHIP_NUMBER, 1);
+        Erase(info.start_page, info.bank); // очистить номер чипа
+        // Erase(PAGE_CHIP, BANK_N_CHIP); 
         Flash(ADRESS_CHIP_NUMBER, reinterpret_cast<uint64_t*>(ChipN), 1u);
         ChipNumber[0] = ChipN[0];
     }
@@ -79,7 +78,7 @@ void communication() {
 
     if (rx_command == command::set_number) {
 
-        Set_N(tx_settings[1]);
+        Set_N(rx_settings[1]);
         tx_settings[1] = ChipNumber[0];
         USART2_Send_settings();
     }
@@ -98,13 +97,20 @@ void communication() {
 
         Copy_array_to_flash();
     }
+
+    if (rx_command == command::echo) {
+        tx_settings[0] = ChipNumber[0];
+        tx_settings[1] = ChipNumber[0];
+        tx_settings[2] = ChipNumber[0];
+        tx_settings[3] = ChipNumber[0];
+        tx_settings[4] = ChipNumber[0];
+        USART2_Send_settings();
+    }
 }
 
 // UART Send-Recive
 void USART2_Send_settings() {
     LL_USART_EnableDirectionTx(USART2); // отправлять только при ВЫКЛюченных остальных слэйв-трансляторах.. иначе замыкание
-    // conv16to8x2 c;
-    // c = convert16to8x2(value);
     while (!LL_USART_IsActiveFlag_TXE(USART2)) {}
     for (int i = 0; i < tx_settings_length; i++) {
         LL_USART_TransmitData9(USART2, tx_settings[i]);
@@ -269,9 +275,13 @@ void Jump_to_app() {
 
 void Set_N(const int n) {
     ChipNumber[0] = 0;
-    Erase(PAGE_CHIP, BANK_N_CHIP); // очистить номер чипа
+    FlashPageInfo_t info = GetPageAndBank(ADRESS_CHIP_NUMBER, 1);
+    Erase(info.start_page, info.bank); // очистить номер чипа
     Flash(ADRESS_CHIP_NUMBER, reinterpret_cast<uint64_t*>(n), 1u);
     Read(ADRESS_CHIP_NUMBER, const_cast<uint8_t*>(ChipNumber), 1u);
+    LL_USART_Disable(USART2);
+    LL_USART_ConfigNodeAddress(USART2, LL_USART_ADDRESS_DETECT_7B, ChipNumber[0]);
+    LL_USART_Enable(USART2);
 }
 
 void From_H7_to_array_g4() {

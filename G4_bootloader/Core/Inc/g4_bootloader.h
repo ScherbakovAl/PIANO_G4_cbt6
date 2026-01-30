@@ -25,7 +25,8 @@ enum command {
     set_number,
     data_from_H7_to_array_g4,
     data_from_array_g4_to_H7,
-    copy_array_to_flash
+    copy_array_to_flash,
+    echo
 };
 
 enum response {
