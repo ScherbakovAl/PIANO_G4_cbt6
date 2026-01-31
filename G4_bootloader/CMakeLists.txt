@@ -60,6 +60,14 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined symbols
 )
 
+# Compiler options for Release mode to prevent optimization issues with Flash operations
+target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE
+    $<$<CONFIG:RELEASE>:
+        -fno-strict-aliasing  # Отключить строгое алиасинг для безопасной работы с приведениями типов
+        -fno-optimize-sibling-calls  # Предотвратить оптимизацию хвостовых вызовов
+    >
+)
+
 # Remove wrong libob.a library dependency when using cpp files
 list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
 

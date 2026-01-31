@@ -8,7 +8,8 @@ const uint32_t ADRESS_CHIP_NUMBER = 0x08003800; // здесь храним но�
 const uint32_t MAIN_FIRMWARE = 0x08010000; // здесь основная прошивка // TODO MAIN_FIRMWARE?
 
 // bin_data
-volatile uint8_t bin_data[2048] = {}; // массив для получения прошивки
+// Выравниваем массив по 8-байтной границе для корректной работы с uint64_t
+__attribute__((aligned(8))) volatile uint8_t bin_data[2048] = {}; // массив для получения прошивки
 const uint32_t bin_data_length = sizeof(bin_data);
 
 // settings
@@ -216,23 +217,27 @@ void Flash(uint32_t Address, uint64_t* Data, uint32_t size) {
     // Каждое DOUBLEWORD = 8 байт
     uint32_t doublewords_count = (size + 7) / 8; // Округление вверх
 
+    // Создаем указатель на исходные данные как uint8_t для безопасного доступа
+    volatile uint8_t* src_bytes = (volatile uint8_t*)Data;
+
     // Записываем данные в цикле
     for (uint32_t i = 0; i < doublewords_count; i++) {
         uint32_t current_address = Address + (i * 8);
         uint64_t current_data;
 
+        // Безопасное копирование данных по байтам (избегаем проблем с выравниванием и volatile)
+        uint8_t* dst = (uint8_t*)&current_data;
+        uint32_t bytes_to_copy = 8;
+        
         // Если это последний элемент и size не кратен 8, обрабатываем остаток
         if (i == doublewords_count - 1 && (size % 8) != 0) {
+            bytes_to_copy = size % 8;
             current_data = 0xFFFFFFFFFFFFFFFF; // Заполняем FF (стертое состояние Flash)
-            uint8_t* src = (uint8_t*)&Data[i];
-            uint8_t* dst = (uint8_t*)&current_data;
-            uint32_t remaining_bytes = size % 8;
-            for (uint32_t j = 0; j < remaining_bytes; j++) {
-                dst[j] = src[j];
-            }
         }
-        else {
-            current_data = Data[i];
+
+        // Копируем данные побайтно для избежания проблем с выравниванием
+        for (uint32_t j = 0; j < bytes_to_copy; j++) {
+            dst[j] = src_bytes[i * 8 + j];
         }
 
         // Выполняем запись с проверкой статуса
@@ -396,7 +401,9 @@ void Copy_array_to_flash() {
         Set_tx_s(0x32, 0x32, 0x32, 0x32, 0x32);
         USART2_Send_settings();
 
-        Flash(addr, (uint64_t*)bin_data, bin_data_length);
+        // Безопасная передача данных - используем приведение к volatile uint64_t*
+        // для корректной работы с volatile массивом bin_data
+        Flash(addr, (uint64_t*)(void*)bin_data, bin_data_length);
 
         // Гарантируем завершение Flash перед чтением
         __DSB();
@@ -406,6 +413,7 @@ void Copy_array_to_flash() {
         Set_tx_s(0x35, 0x35, 0x35, 0x35, 0x35);
         USART2_Send_settings();
 
+        // Проверка записанных данных
         volatile uint8_t test[1] = {};
         for (uint32_t i = 0; i < bin_data_length; ++i) {
             Read(addr + i, const_cast<uint8_t*>((uint8_t*)test), 1u);
