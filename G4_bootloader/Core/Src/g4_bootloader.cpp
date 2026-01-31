@@ -534,6 +534,8 @@ void Copy_array_to_flash() {
     // 2 послать адрес в ответ на проверку
     Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает форматированным адресом
     USART2_Send_settings();
+    // const uint32_t addr_raw = bytes_to_uint32_pointer(&rx_s[1]);
+    const uint32_t addr = bytes_to_uint32_pointer(rx_s);
 
 
     // 3 если ок, то записываем в память..
@@ -541,7 +543,7 @@ void Copy_array_to_flash() {
 
     volatile int bug = 0;
     if (rx_s[0] == response::ok) {
-        const uint32_t addr = bytes_to_uint32_pointer(rx_s);
+        
         FlashPageInfo_t info = GetPageAndBank(addr, bin_data_32_length);
         Erase(info.start_page, info.bank);
 
@@ -553,7 +555,6 @@ void Copy_array_to_flash() {
         __DSB();
         __ISB();
 
-        // Flash(addr, (uint64_t*)(void*)bin_data_32, bin_data_32_length);
         Flash_uint32(addr, bin_data_32, bin_data_32_length);
 
         // Гарантируем завершение Flash перед чтением
@@ -566,7 +567,7 @@ void Copy_array_to_flash() {
 
         // Проверка записанных данных
         volatile uint8_t test[1] = {};
-        for (uint32_t i = 0; i < bin_data_32_length; ++i) {
+        for (uint32_t i = 0; i < bin_data_32_length / 4; ++i) {
             Read(addr + i, const_cast<uint8_t*>((uint8_t*)test), 1u);
             if (bin_data_32[i] != test[0]) {
                 ++bug;
