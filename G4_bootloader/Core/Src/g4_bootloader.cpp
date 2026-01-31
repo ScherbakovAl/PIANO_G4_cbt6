@@ -361,11 +361,15 @@ void Read_uint32(uint32_t Address, volatile uint32_t* pData, uint32_t Size) {
 void Flash_uint32(uint32_t Address, volatile uint32_t* Data, uint32_t size) {
     // Проверка выравнивания адреса по 8 байт для DOUBLEWORD
     if (Address % 8 != 0) {
+        Set_tx_s(0x11, 0x11, 0x11, 0x11, 0x11);
+        USART2_Send_settings();
         return;
     }
 
     // Проверяем корректность параметров
     if (size == 0 || Data == NULL) {
+        Set_tx_s(0x22, 0x22, 0x22, 0x22, 0x22);
+        USART2_Send_settings();
         return;
     }
 
@@ -541,13 +545,13 @@ void Copy_array_to_flash() {
         FlashPageInfo_t info = GetPageAndBank(addr, bin_data_32_length);
         Erase(info.start_page, info.bank);
 
-        // Гарантируем завершение Erase перед Flash
-        __DSB();
-        __ISB();
-
         // 3.2
         Set_tx_s(0x32, 0x32, 0x32, 0x32, 0x32);
         USART2_Send_settings();
+
+        // Гарантируем завершение Erase перед Flash
+        __DSB();
+        __ISB();
 
         // Flash(addr, (uint64_t*)(void*)bin_data_32, bin_data_32_length);
         Flash_uint32(addr, bin_data_32, bin_data_32_length);
