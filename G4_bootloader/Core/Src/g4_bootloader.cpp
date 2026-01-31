@@ -1,7 +1,9 @@
 #include "g4_bootloader.h"
 
-uint8_t ChipN[1] = { 0x35 }; // <<<<< номер чипа указать здесь (который запишется в FLASH в первый раз)
-volatile uint8_t ChipNumber[1] = {};
+
+// TODO убрать эти старые массивы..
+uint8_t ChipN[1] = { 0x1 }; // <<<<< номер чипа указать здесь (который запишется в FLASH в первый раз)
+uint8_t ChipNumber[1] = {};
 __attribute__((aligned(8))) uint8_t bin_data[2048] = {}; // массив для получения прошивки
 const uint32_t bin_data_length = sizeof(bin_data);
 
@@ -12,7 +14,7 @@ const uint32_t bin_data_32_length = sizeof(bin_data_32); // 2 kB
 
 
 static const uint32_t ADRESS_CHIP_NUMBER = 0x08003800; // здесь храним номер чипа
-static volatile uint32_t MAIN_FIRMWARE = 0x08010000; // здесь основная прошивка // TODO MAIN_FIRMWARE?
+static volatile uint32_t MAIN_FIRMWARE = 0x08008000; // здесь основная прошивка // TODO MAIN_FIRMWARE?
 
 static inline void uint32_to_bytes_pointer(uint32_t value, uint8_t* bytes);
 static inline uint32_t bytes_to_uint32_pointer(const uint8_t* bytes);
@@ -107,13 +109,13 @@ void communication() {
         From_array_g4_to_H7();
     }
 
-    if (rx_command == command::copy_array_to_flash) { // TODO
+    if (rx_command == command::copy_array_to_flash) { // ok
 
         Copy_array_to_flash();
     }
 
     if (rx_command == command::echo) { // ok
-        Set_tx_s(0, ChipNumber[0], 0, 0, 0);
+        Set_tx_s(ChipNumber[0], 0, 0, 0, 0);
         USART2_Send_settings();
     }
 }
@@ -489,7 +491,7 @@ void From_H7_to_array_g4() {
     Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает 0x11, 0x12, 0x13, 0x14
     USART2_Send_settings();
 
-    for (uint32_t i = 0; i < bin_data_32_length / 4; ++i) {
+    for (uint32_t i = 0; i < 512; ++i) {// 2kB (4*512) размер пакета с прошивкой
         USART2_Receive_settings2();
         bin_data_32[i] = bytes_to_uint32_pointer(rx_s);
         Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], (uint8_t)i); // отвечает то, что получил
@@ -565,11 +567,10 @@ void Copy_array_to_flash() {
         Set_tx_s(0x35, 0x35, 0x35, 0x35, 0x35);
         USART2_Send_settings();
 
-        // Проверка записанных данных
-        volatile uint8_t test[1] = {};
-        for (uint32_t i = 0; i < bin_data_32_length / 4; ++i) {
-            Read(addr + i, const_cast<uint8_t*>((uint8_t*)test), 1u);
-            if (bin_data_32[i] != test[0]) {
+        // Проверка записанных данных - прямое сравнение с памятью
+        volatile uint32_t* flash_ptr = (volatile uint32_t*)addr;
+        for (uint32_t i = 0; i < (bin_data_32_length / 4); ++i) {
+            if (bin_data_32[i] != flash_ptr[i]) {
                 ++bug;
             }
         }
