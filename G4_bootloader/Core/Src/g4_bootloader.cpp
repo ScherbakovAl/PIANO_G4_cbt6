@@ -360,6 +360,7 @@ uint32_t bytes_to_uint32_safe(const uint8_t* bytes) {
     return result;
 }
 
+        // Fl(addr, reinterpret_cast<uint64_t*>(const_cast<uint8_t*>(bin_data)), bin_data_length);
 
 void Copy_array_to_flash() {
 
@@ -395,7 +396,6 @@ void Copy_array_to_flash() {
         Set_tx_s(0x32, 0x32, 0x32, 0x32, 0x32);
         USART2_Send_settings();
 
-        // Flash(addr, reinterpret_cast<uint64_t*>(const_cast<uint8_t*>(bin_data)), bin_data_length);
         Flash(addr, (uint64_t*)bin_data, bin_data_length);
 
         // Гарантируем завершение Flash перед чтением
