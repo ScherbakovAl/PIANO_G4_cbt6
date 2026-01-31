@@ -51,6 +51,8 @@ void Lock();
 void Erase(uint32_t Page, uint32_t Banks);
 void Flash(uint32_t Address, uint64_t* Data, uint32_t size);
 void Read(uint32_t Address, uint8_t* pData, uint32_t Size);
+void Flash_uint32(uint32_t Address, volatile uint32_t* Data, uint32_t size);
+void Read_uint32(uint32_t Address, volatile uint32_t* pData, uint32_t Size);
 void Reset();
 void Jump_to_app();
 void Set_N(const int n);

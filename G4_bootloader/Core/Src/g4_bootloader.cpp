@@ -2,26 +2,25 @@
 
 uint8_t ChipN[1] = { 0x35 }; // <<<<< номер чипа указать здесь (который запишется в FLASH в первый раз)
 volatile uint8_t ChipNumber[1] = {};
+__attribute__((aligned(8))) uint8_t bin_data[2048] = {}; // массив для получения прошивки
+const uint32_t bin_data_length = sizeof(bin_data);
 
 __attribute__((aligned(32))) const volatile uint32_t ChipN_32[1] = { 0x35 }; // <<<<< номер чипа указать здесь (который запишется в FLASH в первый раз)
 __attribute__((aligned(32))) volatile uint32_t ChipNumber_32[1] = {}; // <<<<< номер чипа - использовать в коде
-const uint32_t ADRESS_CHIP_NUMBER = 0x08003800; // здесь храним номер чипа
+__attribute__((aligned(32))) volatile uint32_t bin_data_32[512] = {};
+const uint32_t bin_data_32_length = sizeof(bin_data_32); // 2 kB
 
-// уточнить здесь адрес, где будет находится прошивка
-const uint32_t MAIN_FIRMWARE = 0x08010000; // здесь основная прошивка // TODO MAIN_FIRMWARE?
 
-// bin_data
-// Выравниваем массив по 8-байтной границе для корректной работы с uint64_t
-uint8_t bin_data[2048] = {}; // массив для получения прошивки
-const uint32_t bin_data_length = sizeof(bin_data);
+static const uint32_t ADRESS_CHIP_NUMBER = 0x08003800; // здесь храним номер чипа
+static volatile uint32_t MAIN_FIRMWARE = 0x08010000; // здесь основная прошивка // TODO MAIN_FIRMWARE?
 
-__attribute__((aligned(32))) volatile uint32_t bin_data_32[256] = {};
-const uint32_t bin_data_32_length = sizeof(bin_data_32);
+static inline void uint32_to_bytes_pointer(uint32_t value, uint8_t* bytes);
+static inline uint32_t bytes_to_uint32_pointer(const uint8_t* bytes);
 
 // settings
-volatile uint8_t tx_s[5] = { };
+__attribute__((aligned(8))) uint8_t tx_s[5] = { };
 const int tx_settings_length = sizeof(tx_s);
-volatile uint8_t rx_s[5] = { };
+__attribute__((aligned(8))) uint8_t rx_s[5] = { };
 const int rx_settings_length = sizeof(rx_s);
 
 void g4_bootloader() {
@@ -83,7 +82,7 @@ void communication() {
         Reset();
     }
 
-    if (rx_command == command::jump_to_piano_g4) {
+    if (rx_command == command::jump_to_piano_g4) { // ok
 
         USART2_Send_responce(response::ok);
         Jump_to_app();
@@ -156,7 +155,7 @@ void USART2_Receive_settings() {
         while (!LL_USART_IsActiveFlag_RXNE(USART2)) {}
         rx_s[i] = LL_USART_ReceiveData9(USART2);
     }
-    // LL_USART_RequestRxDataFlush(USART2);
+    LL_USART_RequestRxDataFlush(USART2);
     // LL_USART_RequestEnterMuteMode(USART2);
 }
 
@@ -167,7 +166,7 @@ void USART2_Receive_settings2() {
         while (!LL_USART_IsActiveFlag_RXNE(USART2)) {}
         rx_s[i] = LL_USART_ReceiveData9(USART2);
     }
-    // LL_USART_RequestRxDataFlush(USART2);
+    LL_USART_RequestRxDataFlush(USART2);
     // LL_USART_RequestEnterMuteMode(USART2);
 }
 //---------------------------------
@@ -293,8 +292,161 @@ void Read(uint32_t Address, uint8_t* pData, uint32_t Size) {
     }
 }
 
+/**
+ * @brief Чтение данных из Flash памяти в формате uint32_t
+ * @param Address: Адрес начала чтения во Flash (должен быть выровнен по 4 байта)
+ * @param pData: Указатель на массив uint32_t для сохранения прочитанных данных
+ * @param Size: Размер данных в БАЙТАХ (не в элементах uint32_t!)
+ * @note  Функция безопасна для вызова из прерывания
+ * @note  Размер Size будет округлен вверх до кратного 4
+ *
+ * Пример использования:
+ * __attribute__((aligned(32))) volatile uint32_t bin_data_32[512];
+ * Read_uint32(0x08008000, bin_data_32, 2048); // Прочитать 2048 байт (512 uint32_t)
+ */
+void Read_uint32(uint32_t Address, volatile uint32_t* pData, uint32_t Size) {
+
+    if (pData == NULL || Size == 0) {
+        return;
+    }
+
+    // Проверка, что адрес находится в области флеш-памяти
+    if (Address < FLASH_BASE || Address >= (FLASH_BASE + FLASH_SIZE)) {
+        return;
+    }
+
+    // Проверка выравнивания адреса по 4 байта для оптимальной работы
+    if (Address % 4 != 0) {
+        return;
+    }
+
+    // Вычисляем количество uint32_t элементов (округляем вверх)
+    uint32_t count = (Size + 3) / 4;
+
+    // Проверка, что чтение не выходит за границы флеш-памяти
+    if ((Address + (count * 4)) > (FLASH_BASE + FLASH_SIZE)) {
+        return;
+    }
+
+    // Прямое чтение из памяти uint32_t словами (быстрее чем побайтно)
+    volatile uint32_t* pFlashAddr = (volatile uint32_t*)Address;
+
+    // Используем критическую секцию для безопасности вызова из прерывания
+    uint32_t primask = __get_PRIMASK();
+    // __disable_irq();
+
+    for (uint32_t i = 0; i < count; i++) {
+        pData[i] = pFlashAddr[i];
+    }
+
+    __set_PRIMASK(primask);
+}
+
+/**
+ * @brief Запись данных в Flash память в формате uint32_t
+ * @param Address: Адрес начала записи во Flash (должен быть выровнен по 8 байт)
+ * @param Data: Указатель на массив uint32_t с данными для записи
+ * @param size: Размер данных в БАЙТАХ (не в элементах uint32_t!)
+ * @note  Функция безопасна для вызова из прерывания
+ * @note  Размер size будет округлен вверх до кратного 8 (т.к. запись doubleword)
+ * @note  Перед записью необходимо стереть страницу Flash с помощью Erase()
+ *
+ * Пример использования:
+ * __attribute__((aligned(32))) volatile uint32_t bin_data_32[512] = {данные};
+ * uint32_t addr = 0x08008000;
+ * FlashPageInfo_t info = GetPageAndBank(addr, 2048);
+ * Erase(info.start_page, info.bank);
+ * Flash_uint32(addr, bin_data_32, 2048); // Записать 2048 байт (512 uint32_t)
+ */
+void Flash_uint32(uint32_t Address, volatile uint32_t* Data, uint32_t size) {
+    // Проверка выравнивания адреса по 8 байт для DOUBLEWORD
+    if (Address % 8 != 0) {
+        return;
+    }
+
+    // Проверяем корректность параметров
+    if (size == 0 || Data == NULL) {
+        return;
+    }
+
+    // Используем критическую секцию для безопасности вызова из прерывания
+    uint32_t primask = __get_PRIMASK();
+    // __disable_irq();
+
+    Unlock();
+
+    // Барьер памяти перед началом операций
+    __DMB();
+
+    // Вычисляем количество DOUBLEWORD для записи (каждое = 8 байт = 2 uint32_t)
+    uint32_t doublewords_count = (size + 7) / 8;
+
+    // Записываем данные в цикле
+    for (uint32_t i = 0; i < doublewords_count; i++) {
+        uint32_t current_address = Address + (i * 8);
+        uint64_t current_data;
+
+        // Индекс в массиве uint32_t (каждый doubleword = 2 uint32_t)
+        uint32_t idx = i * 2;
+
+        // Формируем 64-битное значение из двух 32-битных
+        // Little Endian: младшие биты идут первыми
+        if ((i * 8 + 8) <= size) {
+            // Полный doubleword
+            current_data = ((uint64_t)Data[idx]) | (((uint64_t)Data[idx + 1]) << 32);
+        }
+        else {
+         // Последний неполный doubleword - заполняем FF
+            current_data = 0xFFFFFFFFFFFFFFFF;
+            uint32_t remaining_bytes = size - (i * 8);
+
+            if (remaining_bytes >= 4) {
+                // Первые 4 байта из Data[idx]
+                current_data = (uint64_t)Data[idx];
+                if (remaining_bytes > 4) {
+                    // Частично второй uint32_t
+                    uint32_t partial = Data[idx + 1];
+                    uint32_t valid_bytes = remaining_bytes - 4;
+                    uint32_t mask = (1UL << (valid_bytes * 8)) - 1;
+                    partial &= mask;
+                    current_data |= ((uint64_t)partial) << 32;
+                }
+            }
+            else {
+             // Меньше 4 байт - только часть первого uint32_t
+                uint32_t partial = Data[idx];
+                uint32_t mask = (1UL << (remaining_bytes * 8)) - 1;
+                partial &= mask;
+                current_data = (uint64_t)partial;
+            }
+        }
+
+        // Выполняем запись
+        HAL_StatusTypeDef status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, current_address, current_data);
+
+        // Барьер памяти после записи
+        __DMB();
+
+        FLASH_WaitForLastOperation(FLASH_TIMEOUT_VALUE);
+
+        // Проверяем статус
+        // if (status != HAL_OK) {
+        //     __DMB();
+        //     Lock();
+        //     __set_PRIMASK(primask);
+        //     return;
+        // }
+    }
+
+    // Барьер памяти перед завершением
+    __DMB();
+    Lock();
+
+    __set_PRIMASK(primask);
+}
+
 void Reset() {
-    // LL_mDelay(20); // ?
+    // LL_mDelay(20); // TODO ?
     NVIC_SystemReset();
 }
 
@@ -330,23 +482,17 @@ void Set_N(const int n) {
 
 void From_H7_to_array_g4() {
 
-    Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает то, что получил
+    Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает 0x11, 0x12, 0x13, 0x14
     USART2_Send_settings();
-    // LL_USART_RequestRxDataFlush(USART2);   // сбрасывает RXNE флаг
-    // uint8_t data = LL_USART_ReceiveData9(USART2);
 
-
-    for (uint32_t i = 0; i < bin_data_length;) {
+    for (uint32_t i = 0; i < bin_data_32_length / 4; ++i) {
         USART2_Receive_settings2();
-        bin_data[i++] = rx_s[1];
-        bin_data[i++] = rx_s[2];
-        bin_data[i++] = rx_s[3];
-        bin_data[i++] = rx_s[4];
-        Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает то, что получил
+        bin_data_32[i] = bytes_to_uint32_pointer(rx_s);
+        Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], (uint8_t)i); // отвечает то, что получил
         USART2_Send_settings();
     }
-    USART2_Send_responce(response::ok);
 
+    USART2_Send_responce(response::ok);
 }
 
 void From_array_g4_to_H7() {
@@ -359,123 +505,19 @@ void From_array_g4_to_H7() {
 }
 
 
-#include <cstring>
 
-// ============================================================================
-// КОНВЕРТАЦИЯ UINT32_T <-> 4x UINT8_T
-// Варианты для сравнения производительности на STM32G474 (Cortex-M4)
-// ============================================================================
-
-// ВАРИАНТ 1: Использование memcpy (переносимый, компилятор может оптимизировать)
-// Преимущества: портативный, безопасный, компилятор часто оптимизирует в 1-2 инструкции
-// Недостатки: может быть медленнее на некоторых компиляторах
-void uint32_to_bytes_safe(uint32_t value, uint8_t* bytes) {
-    memcpy(bytes, &value, sizeof(value));
-}
-
-uint32_t bytes_to_uint32_safe(const uint8_t* bytes) {
-    uint32_t result;
-    memcpy(&result, bytes, sizeof(result));
-    return result;
-}
-
-// ВАРИАНТ 2: Прямое приведение указателей (самый быстрый для выровненных данных)
-// Преимущества: 1 инструкция LDR/STR, самый быстрый если данные выровнены по 4 байта
-// Недостатки: может вызвать HardFault если bytes не выровнен (на Cortex-M4 обычно работает)
-// ВНИМАНИЕ: Требуется выравнивание адреса по 4 байта для максимальной производительности!
 static inline void uint32_to_bytes_pointer(uint32_t value, uint8_t* bytes) {
-    *((uint32_t*)bytes) = value;
+    *((uint32_t*)bytes) = value; // требуется выравнивание !
 }
 
 static inline uint32_t bytes_to_uint32_pointer(const uint8_t* bytes) {
-    return *((uint32_t*)bytes);
+    return *((uint32_t*)bytes); // требуется выравнивание !
 }
 
-// ВАРИАНТ 3: Побитовые сдвиги (универсальный, работает с любым выравниванием)
-// Преимущества: предсказуемое поведение, независимо от выравнивания, ~4-5 инструкций
-// Недостатки: немного медленнее варианта 2, но быстрее на невыровненных данных
-static inline void uint32_to_bytes_shift(uint32_t value, uint8_t* bytes) {
-    bytes[0] = (uint8_t)(value & 0xFF);
-    bytes[1] = (uint8_t)((value >> 8) & 0xFF);
-    bytes[2] = (uint8_t)((value >> 16) & 0xFF);
-    bytes[3] = (uint8_t)((value >> 24) & 0xFF);
-}
-
-static inline uint32_t bytes_to_uint32_shift(const uint8_t* bytes) {
-    return (uint32_t)bytes[0]
-        | ((uint32_t)bytes[1] << 8)
-        | ((uint32_t)bytes[2] << 16)
-        | ((uint32_t)bytes[3] << 24);
-}
-
-// ВАРИАНТ 4: Union (компактный, хорошо оптимизируется)
-// Преимущества: читаемый код, компилятор хорошо оптимизирует
-// Недостатки: технически undefined behavior в C++ (но работает на всех ARM компиляторах)
-typedef union {
-    uint32_t u32;
-    uint8_t u8[4];
-} uint32_bytes_union_t;
-
-static inline void uint32_to_bytes_union(uint32_t value, uint8_t* bytes) {
-    uint32_bytes_union_t converter;
-    converter.u32 = value;
-    bytes[0] = converter.u8[0];
-    bytes[1] = converter.u8[1];
-    bytes[2] = converter.u8[2];
-    bytes[3] = converter.u8[3];
-}
-
-static inline uint32_t bytes_to_uint32_union(const uint8_t* bytes) {
-    uint32_bytes_union_t converter;
-    converter.u8[0] = bytes[0];
-    converter.u8[1] = bytes[1];
-    converter.u8[2] = bytes[2];
-    converter.u8[3] = bytes[3];
-    return converter.u32;
-}
-
-// ============================================================================
-// РЕКОМЕНДАЦИИ ПО ИСПОЛЬЗОВАНИЮ:
-// ============================================================================
-//
-// 1. ВАРИАНТ 2 (pointer) - САМЫЙ БЫСТРЫЙ (1 инструкция):
-//    Используйте когда ГАРАНТИРОВАННО массив bytes[] выровнен по 4 байта.
-//    Например: uint8_t __attribute__((aligned(4))) buffer[4];
-//    Производительность: ~1 такт CPU
-//
-// 2. ВАРИАНТ 3 (shift) - УНИВЕРСАЛЬНЫЙ (4-5 инструкций):
-//    Используйте для невыровненных данных или когда выравнивание неизвестно.
-//    Работает всегда корректно, хорошая производительность.
-//    Производительность: ~4-5 тактов CPU
-//
-// 3. ВАРИАНТ 1 (memcpy) - ПЕРЕНОСИМЫЙ:
-//    Компилятор GCC с -O2/-O3 обычно оптимизирует в ВАРИАНТ 2 или 3.
-//    Используйте для переносимого кода.
-//    Производительность: зависит от оптимизации компилятора
-//
-// 4. ВАРИАНТ 4 (union) - КОМПРОМИСС:
-//    Хороший компромисс между читаемостью и производительностью.
-//    Производительность: ~2-4 такта CPU
-//
-// ============================================================================
-// ТЕСТИРОВАНИЕ:
-// ============================================================================
-// Для определения самого быстрого варианта на вашей конфигурации:
-// 1. Скомпилируйте с -O2 или -O3
-// 2. Посмотрите дизассемблированный код
-// 3. Измерьте время выполнения с помощью DWT->CYCCNT (cycle counter)
-//
-// Пример измерения:
-// volatile uint32_t start = DWT->CYCCNT;
-// uint32_to_bytes_shift(0x12345678, buffer);
-// volatile uint32_t cycles = DWT->CYCCNT - start;
-// ============================================================================
-
-        // Fl(addr, reinterpret_cast<uint64_t*>(const_cast<uint8_t*>(bin_data)), bin_data_length);
 
 void Copy_array_to_flash() {
 
-    Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает 0x11 0x12 0x13 0x14
+    Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает 0x06 0x11 0x12 0x13 0x14
     USART2_Send_settings();
 
     // **  ****  ****  ****  ****  ****  ****  ****  ****  **
@@ -495,8 +537,8 @@ void Copy_array_to_flash() {
 
     volatile int bug = 0;
     if (rx_s[0] == response::ok) {
-        const uint32_t addr = 0x08008000;
-        FlashPageInfo_t info = GetPageAndBank(addr, bin_data_length);
+        const uint32_t addr = bytes_to_uint32_pointer(rx_s);
+        FlashPageInfo_t info = GetPageAndBank(addr, bin_data_32_length);
         Erase(info.start_page, info.bank);
 
         // Гарантируем завершение Erase перед Flash
@@ -507,9 +549,8 @@ void Copy_array_to_flash() {
         Set_tx_s(0x32, 0x32, 0x32, 0x32, 0x32);
         USART2_Send_settings();
 
-        // Безопасная передача данных - используем приведение к volatile uint64_t*
-        // для корректной работы с volatile массивом bin_data
-        Flash(addr, (uint64_t*)(void*)bin_data, bin_data_length);
+        // Flash(addr, (uint64_t*)(void*)bin_data_32, bin_data_32_length);
+        Flash_uint32(addr, bin_data_32, bin_data_32_length);
 
         // Гарантируем завершение Flash перед чтением
         __DSB();
@@ -521,9 +562,9 @@ void Copy_array_to_flash() {
 
         // Проверка записанных данных
         volatile uint8_t test[1] = {};
-        for (uint32_t i = 0; i < bin_data_length; ++i) {
+        for (uint32_t i = 0; i < bin_data_32_length; ++i) {
             Read(addr + i, const_cast<uint8_t*>((uint8_t*)test), 1u);
-            if (bin_data[i] != test[0]) {
+            if (bin_data_32[i] != test[0]) {
                 ++bug;
             }
         }
@@ -617,7 +658,10 @@ FlashPageInfo_t GetPageAndBank(uint32_t Address, uint32_t Size) {
     return info;
 }
 
+
+
 // пометочки..
+/*
 // .......................................................
     // BANK_1 -  0 to page 31
     // Erase(20, FLASH_BANK_1);
@@ -727,3 +771,90 @@ FlashPageInfo_t GetPageAndBank(uint32_t Address, uint32_t Size) {
 // }
 // .......................................................
 
+*/
+
+// ============================================================================
+// ПРИМЕРЫ ИСПОЛЬЗОВАНИЯ НОВЫХ ФУНКЦИЙ Flash_uint32 И Read_uint32
+// ============================================================================
+
+// ПРИМЕР 1: Конвертация bin_data (uint8_t) в bin_data_32 (uint32_t) и запись
+void Example_Convert_And_Write() {
+    // Шаг 1: Конвертируем uint8_t массив в uint32_t
+    // bin_data[2048] -> bin_data_32[512]
+    for (uint32_t i = 0; i < bin_data_length / 4; i++) {
+        // Вариант через побитовые операции (универсальный)
+        // bin_data_32[i] = bytes_to_uint32_shift(&bin_data[i * 4]);
+
+        // Или вариант через прямое приведение (если bin_data выровнен по 4)
+        // bin_data_32[i] = *((uint32_t*)(&bin_data[i * 4]));
+    }
+
+    // Шаг 2: Записываем в flash
+    const uint32_t addr = 0x08008000;
+    FlashPageInfo_t info = GetPageAndBank(addr, bin_data_32_length);
+    Erase(info.start_page, info.bank);
+
+    __DSB();  // Гарантируем завершение стирания
+    __ISB();
+
+    Flash_uint32(addr, bin_data_32, bin_data_32_length);
+}
+
+// ПРИМЕР 2: Чтение из flash в uint32_t массив и конвертация обратно в uint8_t
+void Example_Read_And_Convert() {
+    const uint32_t addr = 0x08008000;
+
+    // Шаг 1: Читаем из flash в uint32_t массив
+    Read_uint32(addr, bin_data_32, bin_data_32_length);
+
+    // Шаг 2: Конвертируем uint32_t обратно в uint8_t
+    for (uint32_t i = 0; i < bin_data_32_length / 4; i++) {
+        // Вариант через побитовые операции
+        // uint32_to_bytes_shift(bin_data_32[i], &bin_data[i * 4]);
+
+        // Или прямое приведение (если bin_data выровнен)
+        // *((uint32_t*)(&bin_data[i * 4])) = bin_data_32[i];
+    }
+}
+
+// ПРИМЕР 3: Использование из прерывания (безопасно!)
+void USART2_IRQ_Example() {
+    // Эти функции безопасны для вызова из прерывания
+    // т.к. используют критические секции внутри
+
+    // Чтение
+    Read_uint32(0x08008000, bin_data_32, 2048);
+
+    // Запись (но убедитесь что страница предварительно стерта!)
+    // Flash_uint32(0x08008000, bin_data_32, 2048);
+}
+
+// ПРИМЕР 4: Прямая работа без конвертации (только uint32_t)
+void Example_Direct_uint32_Work() {
+    // Заполняем данными напрямую
+    for (uint32_t i = 0; i < 512; i++) {
+        bin_data_32[i] = 0x12345678 + i;
+    }
+
+    // Записываем
+    const uint32_t addr = 0x08008000;
+    FlashPageInfo_t info = GetPageAndBank(addr, 2048);
+    Erase(info.start_page, info.bank);
+    __DSB();
+    __ISB();
+    Flash_uint32(addr, bin_data_32, 2048);
+
+    // Проверяем чтением
+    __attribute__((aligned(32))) volatile uint32_t verify_data[512] = {};
+    Read_uint32(addr, verify_data, 2048);
+
+    // Сравниваем
+    for (uint32_t i = 0; i < 512; i++) {
+        if (bin_data_32[i] != verify_data[i]) {
+            // Ошибка!
+            break;
+        }
+    }
+}
+
+// ============================================================================
