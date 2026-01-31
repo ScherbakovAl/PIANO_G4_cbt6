@@ -1,7 +1,10 @@
 #include "g4_bootloader.h"
 
 uint8_t ChipN[1] = { 0x35 }; // <<<<< номер чипа указать здесь (который запишется в FLASH в первый раз)
-volatile uint8_t ChipNumber[1] = {}; // <<<<< номер чипа - использовать в коде
+volatile uint8_t ChipNumber[1] = {};
+
+__attribute__((aligned(32))) const volatile uint32_t ChipN_32[1] = { 0x35 }; // <<<<< номер чипа указать здесь (который запишется в FLASH в первый раз)
+__attribute__((aligned(32))) volatile uint32_t ChipNumber_32[1] = {}; // <<<<< номер чипа - использовать в коде
 const uint32_t ADRESS_CHIP_NUMBER = 0x08003800; // здесь храним номер чипа
 
 // уточнить здесь адрес, где будет находится прошивка
@@ -9,13 +12,16 @@ const uint32_t MAIN_FIRMWARE = 0x08010000; // здесь основная про
 
 // bin_data
 // Выравниваем массив по 8-байтной границе для корректной работы с uint64_t
-__attribute__((aligned(8))) volatile uint8_t bin_data[2048] = {}; // массив для получения прошивки
+uint8_t bin_data[2048] = {}; // массив для получения прошивки
 const uint32_t bin_data_length = sizeof(bin_data);
 
+__attribute__((aligned(32))) volatile uint32_t bin_data_32[256] = {};
+const uint32_t bin_data_32_length = sizeof(bin_data_32);
+
 // settings
-uint8_t tx_s[5] = { };
+volatile uint8_t tx_s[5] = { };
 const int tx_settings_length = sizeof(tx_s);
-uint8_t rx_s[5] = { };
+volatile uint8_t rx_s[5] = { };
 const int rx_settings_length = sizeof(rx_s);
 
 void g4_bootloader() {
@@ -71,7 +77,7 @@ void communication() {
     USART2_Receive_settings();
     const uint8_t rx_command = rx_s[0];
 
-    if (rx_command == command::reset) {
+    if (rx_command == command::reset) { // ok
 
         USART2_Send_responce(response::ok);
         Reset();
