@@ -8,7 +8,7 @@ const uint32_t ADRESS_CHIP_NUMBER = 0x08003800; // здесь храним но�
 const uint32_t MAIN_FIRMWARE = 0x08010000; // здесь основная прошивка // TODO MAIN_FIRMWARE?
 
 // bin_data
-uint8_t bin_data[2048] = {}; // массив для получения прошивки
+volatile uint8_t bin_data[2048] = {}; // массив для получения прошивки
 const uint32_t bin_data_length = sizeof(bin_data);
 
 // settings
@@ -178,6 +178,9 @@ void Erase(uint32_t Page, uint32_t Banks) {
     // Использование низкоуровневой функции FLASH_PageErase требует ручного управления!
     FLASH_PageErase(Page, Banks);
 
+    // Барьер памяти - предотвращает переупорядочивание операций
+    __DMB();
+
     // КРИТИЧНО: Необходимо дождаться завершения операции стирания!
     FLASH_WaitForLastOperation(FLASH_TIMEOUT_VALUE);
 
@@ -186,6 +189,9 @@ void Erase(uint32_t Page, uint32_t Banks) {
 
     // Очистить флаги ошибок, если они есть
     __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
+
+    // Барьер памяти перед разблокировкой
+    __DMB();
     Lock();
 }
 
@@ -202,6 +208,9 @@ void Flash(uint32_t Address, uint64_t* Data, uint32_t size) {
     }
 
     Unlock();
+
+    // Барьер памяти перед началом операций
+    __DMB();
 
     // Вычисляем количество DOUBLEWORD для записи
     // Каждое DOUBLEWORD = 8 байт
@@ -228,17 +237,24 @@ void Flash(uint32_t Address, uint64_t* Data, uint32_t size) {
 
         // Выполняем запись с проверкой статуса
         HAL_StatusTypeDef status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, current_address, current_data);
+
+        // Барьер памяти после записи
+        __DMB();
+
         FLASH_WaitForLastOperation(FLASH_TIMEOUT_VALUE);
 
         // Проверяем статус и обрабатываем ошибку:
         if (status != HAL_OK) {
             // Обработка ошибки записи
             // uint32_t error = HAL_FLASH_GetError();
+            __DMB();
             Lock();
             return;
         }
     }
 
+    // Барьер памяти перед завершением
+    __DMB();
     Lock();
 }
 
@@ -371,26 +387,38 @@ void Copy_array_to_flash() {
 
 
 
-    int bug = 0;
+    volatile int bug = 0;
     if (rx_s[0] == response::ok) {
         const uint32_t addr = 0x08008000;
         FlashPageInfo_t info = GetPageAndBank(addr, bin_data_length);
         Erase(info.start_page, info.bank);
-        Flash(addr, reinterpret_cast<uint64_t*>(bin_data), bin_data_length);
+
+        // Гарантируем завершение Erase перед Flash
+        __DSB();
+        __ISB();
+
+        // 3.2
+        USART2_Send_responce(response::ok);
+
+        Flash(addr, reinterpret_cast<uint64_t*>(const_cast<uint8_t*>(bin_data)), bin_data_length);
+
+        // Гарантируем завершение Flash перед чтением
+        __DSB();
+        __ISB();
 
         // 3.5
         USART2_Send_responce(response::ok);
 
-        uint8_t test[1] = {};
+        volatile uint8_t test[1] = {};
         for (uint32_t i = 0; i < bin_data_length; ++i) {
-            Read(addr + i, const_cast<uint8_t*>(test), 1u);
+            Read(addr + i, const_cast<uint8_t*>((uint8_t*)test), 1u);
             if (bin_data[i] != test[0]) {
                 ++bug;
             }
         }
     }
 
-    // 4
+ // 4
     if (bug) {
         USART2_Send_responce(response::fail);
     }
