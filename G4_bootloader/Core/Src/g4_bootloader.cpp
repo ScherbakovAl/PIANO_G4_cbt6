@@ -375,17 +375,11 @@ void Copy_array_to_flash() {
 
     // 2 послать адрес в ответ на проверку
     Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает форматированным адресом
-    // *reinterpret_cast<uint32_t*>(tx_s[1]) = *reinterpret_cast<uint32_t*>(rx_s[1]);
     USART2_Send_settings();
 
 
     // 3 если ок, то записываем в память..
     USART2_Receive_settings2();
-
-
-
-
-
 
     volatile int bug = 0;
     if (rx_s[0] == response::ok) {
@@ -398,16 +392,19 @@ void Copy_array_to_flash() {
         __ISB();
 
         // 3.2
-        USART2_Send_responce(response::ok);
+        Set_tx_s(0x32, 0x32, 0x32, 0x32, 0x32);
+        USART2_Send_settings();
 
-        Flash(addr, reinterpret_cast<uint64_t*>(const_cast<uint8_t*>(bin_data)), bin_data_length);
+        // Flash(addr, reinterpret_cast<uint64_t*>(const_cast<uint8_t*>(bin_data)), bin_data_length);
+        Flash(addr, (uint64_t*)bin_data, bin_data_length);
 
         // Гарантируем завершение Flash перед чтением
         __DSB();
         __ISB();
 
         // 3.5
-        USART2_Send_responce(response::ok);
+        Set_tx_s(0x35, 0x35, 0x35, 0x35, 0x35);
+        USART2_Send_settings();
 
         volatile uint8_t test[1] = {};
         for (uint32_t i = 0; i < bin_data_length; ++i) {
