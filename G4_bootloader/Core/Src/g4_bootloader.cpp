@@ -2,7 +2,7 @@
 
 
 // TODO убрать эти старые массивы..
-uint8_t ChipN[1] = { 0x1 }; // <<<<< номер чипа указать здесь (который запишется в FLASH в первый раз)
+uint8_t ChipN[1] = { 1 }; // <<<<< номер чипа указать здесь (который запишется в FLASH в первый раз)
 uint8_t ChipNumber[1] = {};
 __attribute__((aligned(8))) uint8_t bin_data[2048] = {}; // массив для получения прошивки
 const uint32_t bin_data_length = sizeof(bin_data);
@@ -59,7 +59,17 @@ void g4_bootloader() {
 
 
 
+    SCB->VTOR = MAIN_FIRMWARE; // TODO это надо?
 
+    // Установка указателя стека
+    __set_MSP(*(__IO uint32_t*)MAIN_FIRMWARE); // TODO это надо?
+
+    void (*JumpToApplication)(void);
+    uint32_t JumpAddress;
+    JumpAddress = *(__IO uint32_t*) (MAIN_FIRMWARE + 4); // здесь должно быть " + 4 ", а в скрипте компоновщика " - 8 " !!
+    JumpToApplication = (void (*)(void))JumpAddress;
+    LL_USART_Disable(USART2);
+    JumpToApplication();
     while (1) {}
 }
 
@@ -84,7 +94,7 @@ void communication() {
         Reset();
     }
 
-    if (rx_command == command::jump_to_piano_g4) { // ok
+    if (rx_command == command::jump_to_piano_g4) { // TODO адрес добавить
 
         USART2_Send_responce(response::ok);
         Jump_to_app();
@@ -453,7 +463,7 @@ void Flash_uint32(uint32_t Address, volatile uint32_t* Data, uint32_t size) {
 
 void Reset() {
     // LL_mDelay(20); // TODO ?
-    NVIC_SystemReset();
+    // NVIC_SystemReset();
 }
 
 void Jump_to_app() {
@@ -471,6 +481,7 @@ void Jump_to_app() {
     uint32_t JumpAddress;
     JumpAddress = *(__IO uint32_t*) (MAIN_FIRMWARE + 4); // здесь должно быть " + 4 ", а в скрипте компоновщика " - 8 " !!
     JumpToApplication = (void (*)(void))JumpAddress;
+    LL_USART_Disable(USART2);
     JumpToApplication();
 }
 
@@ -487,9 +498,11 @@ void Set_N(const int n) {
 }
 
 void From_H7_to_array_g4() {
-
+    // *  **  **  **  **  **  **  **  **  **  **  **  **  **  **  **  **  **  **  **  **  **  *
     Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает 0x11, 0x12, 0x13, 0x14
     USART2_Send_settings();
+    // -   - -   - - -   - -   - - -   - -   - - -   - -   - - -   - -   - - -   - -   - - -   
+
 
     for (uint32_t i = 0; i < 512; ++i) {// 2kB (4*512) размер пакета с прошивкой
         USART2_Receive_settings2();
@@ -501,7 +514,7 @@ void From_H7_to_array_g4() {
     USART2_Send_responce(response::ok);
 }
 
-void From_array_g4_to_H7() {
+void From_array_g4_to_H7() { // -----------------------------------------
     // for (int i = 0; i < bin_data_length;) {
     //     *reinterpret_cast<uint32_t*>(rx_s[i + 1]) = *reinterpret_cast<uint32_t*>(bin_data[i]);
     //     USART2_Send_settings();
@@ -523,7 +536,7 @@ static inline uint32_t bytes_to_uint32_pointer(const uint8_t* bytes) {
 
 void Copy_array_to_flash() {
 
-    Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает 0x06 0x11 0x12 0x13 0x14
+    Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает 0x06 0x61 0x62 0x63 0x64
     USART2_Send_settings();
 
     // **  ****  ****  ****  ****  ****  ****  ****  ****  **
@@ -543,9 +556,9 @@ void Copy_array_to_flash() {
     // 3 если ок, то записываем в память..
     USART2_Receive_settings2();
 
-    volatile int bug = 0;
+    int bug = 0;
     if (rx_s[0] == response::ok) {
-        
+
         FlashPageInfo_t info = GetPageAndBank(addr, bin_data_32_length);
         Erase(info.start_page, info.bank);
 
@@ -576,7 +589,7 @@ void Copy_array_to_flash() {
         }
     }
 
- // 4
+    // 4
     if (bug) {
         USART2_Send_responce(response::fail);
     }
