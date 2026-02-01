@@ -20,7 +20,7 @@
 
 
 enum command {
-    reset = 1,
+    reset = 10,
     jump_to_piano_g4,
     set_number,
     data_from_H7_to_array_g4,

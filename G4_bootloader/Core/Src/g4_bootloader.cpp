@@ -14,7 +14,7 @@ const uint32_t bin_data_32_length = sizeof(bin_data_32); // 2 kB
 
 
 static const uint32_t ADRESS_CHIP_NUMBER = 0x08003800; // здесь храним номер чипа
-static volatile uint32_t MAIN_FIRMWARE = 0x08008000; // здесь основная прошивка // TODO MAIN_FIRMWARE?
+static const uint32_t MAIN_FIRMWARE = 0x08008000; // здесь основная прошивка // TODO MAIN_FIRMWARE?
 
 static inline void uint32_to_bytes_pointer(uint32_t value, uint8_t* bytes);
 static inline uint32_t bytes_to_uint32_pointer(const uint8_t* bytes);
@@ -58,18 +58,18 @@ void g4_bootloader() {
     rx_s[0] = ChipNumber[0];
 
 
+    // Установка нового вектора прерываний
+    // SCB->VTOR = MAIN_FIRMWARE; // TODO это надо?
 
-    SCB->VTOR = MAIN_FIRMWARE; // TODO это надо?
+    // // Установка указателя стека
+    // __set_MSP(*(__IO uint32_t*)MAIN_FIRMWARE); // TODO это надо?
 
-    // Установка указателя стека
-    __set_MSP(*(__IO uint32_t*)MAIN_FIRMWARE); // TODO это надо?
-
-    void (*JumpToApplication)(void);
-    uint32_t JumpAddress;
-    JumpAddress = *(__IO uint32_t*) (MAIN_FIRMWARE + 4); // здесь должно быть " + 4 ", а в скрипте компоновщика " - 8 " !!
-    JumpToApplication = (void (*)(void))JumpAddress;
-    LL_USART_Disable(USART2);
-    JumpToApplication();
+    // void (*JumpToApplication)(void);
+    // uint32_t JumpAddress;
+    // JumpAddress = *(__IO uint32_t*) (MAIN_FIRMWARE + 4); // здесь должно быть " + 4 ", а в скрипте компоновщика " - 8 " !!
+    // JumpToApplication = (void (*)(void))JumpAddress;
+    // LL_USART_Disable(USART2);
+    // JumpToApplication();
     while (1) {}
 }
 
@@ -467,9 +467,9 @@ void Reset() {
 }
 
 void Jump_to_app() {
-    // HAL_RCC_DeInit(); // TODO это надо?
-    // HAL_DeInit(); // TODO это надо?
-    // __disable_irq(); // TODO это надо?
+    // HAL_RCC_DeInit(); // TODO это надо? ничего не меняет..
+    // HAL_DeInit(); // TODO это надо? ничего не меняет..
+    // __disable_irq(); // TODO это надо? ничего не меняет..
 
     // Установка нового вектора прерываний
     SCB->VTOR = MAIN_FIRMWARE; // TODO это надо?
