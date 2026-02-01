@@ -11,6 +11,7 @@ __attribute__((aligned(32))) const volatile uint32_t ChipN_32[1] = { 0x35 }; // 
 __attribute__((aligned(32))) volatile uint32_t ChipNumber_32[1] = {}; // <<<<< номер чипа - использовать в коде
 __attribute__((aligned(32))) volatile uint32_t bin_data_32[512] = {};
 const uint32_t bin_data_32_length = sizeof(bin_data_32); // 2 kB
+volatile int flag_for_jump = 0;
 
 
 static const uint32_t ADRESS_CHIP_NUMBER = 0x08003800; // здесь храним номер чипа
@@ -70,7 +71,12 @@ void g4_bootloader() {
     // JumpToApplication = (void (*)(void))JumpAddress;
     // LL_USART_Disable(USART2);
     // JumpToApplication();
-    while (1) {}
+    while (1) {
+        if(flag_for_jump){
+            USART2_Send_responce(response::ok);
+            Jump_to_app();
+        }
+    }
 }
 
 void USART2_IRQ() {
@@ -97,7 +103,8 @@ void communication() {
     if (rx_command == command::jump_to_piano_g4) { // TODO адрес добавить
 
         USART2_Send_responce(response::ok);
-        Jump_to_app();
+        // Jump_to_app();
+        flag_for_jump = 1;
     }
 
     if (rx_command == command::set_number) { // ok
@@ -467,52 +474,51 @@ void Reset() {
 }
 
 void Jump_to_app() {
-    // 1. Отключаем UART и другую периферию ПЕРЕД деинициализацией
-    LL_USART_Disable(USART2);
-    LL_USART_DisableIT_RXNE_RXFNE(USART2);
+    // 1. Отключаем UART и другую периферию
+    // LL_USART_RequestRxDataFlush(USART2);
+    // LL_USART_RequestEnterMuteMode(USART2);
+    // LL_USART_DisableIT_RXNE_RXFNE(USART2);
+    // LL_USART_Disable(USART2);
     
-    // // 2. Деинициализация HAL (сбрасывает SysTick и другие настройки)
+    // 2. Деинициализация HAL (сбрасывает SysTick и другие настройки)
     HAL_DeInit();
     
-    // // 3. Сброс тактирования в дефолтное состояние
+    // 3. Сброс тактирования в дефолтное состояние
     HAL_RCC_DeInit();
     
-    // // 4. Отключаем все прерывания
-    __disable_irq();
+    // 4. Отключаем все прерывания
+    // __disable_irq();
     
-    // // 5. Отключаем SysTick (критично!)
+    // 5. Отключаем SysTick (критично!)
     SysTick->CTRL = 0;
     SysTick->LOAD = 0;
     SysTick->VAL = 0;
     
-    // // 6. Очищаем все pending прерывания
+    // 6. Очищаем все pending прерывания
     for (uint8_t i = 0; i < 8; i++) {
         NVIC->ICER[i] = 0xFFFFFFFF;  // Disable all interrupts
         NVIC->ICPR[i] = 0xFFFFFFFF;  // Clear all pending interrupts
     }
     
-    // // 7. Установка нового вектора прерываний
+    // 7. Установка нового вектора прерываний
     SCB->VTOR = MAIN_FIRMWARE;
     
-    // // 8. Установка указателя стека из основной прошивки
+    // 8. Установка указателя стека из основной прошивки
     __set_MSP(*(__IO uint32_t*)MAIN_FIRMWARE);
     
-    // // 9. Барьеры памяти для гарантии выполнения всех операций
+    // 9. Барьеры памяти для гарантии выполнения всех операций
     __DSB();
     __ISB();
     
-    // // 10. Получаем адрес Reset_Handler основной прошивки и прыгаем
+    // 10. Получаем адрес Reset_Handler основной прошивки и прыгаем
     void (*JumpToApplication)(void);
     uint32_t JumpAddress;
     JumpAddress = *(__IO uint32_t*)(MAIN_FIRMWARE + 4);
     JumpToApplication = (void (*)(void))JumpAddress;
-    USART2_Send_responce(response::ok);
     JumpToApplication();
     
     // Этот код никогда не должен выполниться
-    while (1){
-        // USART2_Send_responce(response::fail);
-    };
+    while (1);
 }
 
 void Set_N(const int n) {
