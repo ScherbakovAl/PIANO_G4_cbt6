@@ -58,7 +58,7 @@ void g4_bootloader() {
     rx_s[0] = ChipNumber[0];
 
 
-    // Установка нового вектора прерываний
+    // // Установка нового вектора прерываний
     // SCB->VTOR = MAIN_FIRMWARE; // TODO это надо?
 
     // // Установка указателя стека
@@ -467,22 +467,52 @@ void Reset() {
 }
 
 void Jump_to_app() {
-    // HAL_RCC_DeInit(); // TODO это надо? ничего не меняет..
-    // HAL_DeInit(); // TODO это надо? ничего не меняет..
-    // __disable_irq(); // TODO это надо? ничего не меняет..
-
-    // Установка нового вектора прерываний
-    SCB->VTOR = MAIN_FIRMWARE; // TODO это надо?
-
-    // Установка указателя стека
-    __set_MSP(*(__IO uint32_t*)MAIN_FIRMWARE); // TODO это надо?
-
+    // 1. Отключаем UART и другую периферию ПЕРЕД деинициализацией
+    LL_USART_Disable(USART2);
+    LL_USART_DisableIT_RXNE_RXFNE(USART2);
+    
+    // // 2. Деинициализация HAL (сбрасывает SysTick и другие настройки)
+    HAL_DeInit();
+    
+    // // 3. Сброс тактирования в дефолтное состояние
+    HAL_RCC_DeInit();
+    
+    // // 4. Отключаем все прерывания
+    __disable_irq();
+    
+    // // 5. Отключаем SysTick (критично!)
+    SysTick->CTRL = 0;
+    SysTick->LOAD = 0;
+    SysTick->VAL = 0;
+    
+    // // 6. Очищаем все pending прерывания
+    for (uint8_t i = 0; i < 8; i++) {
+        NVIC->ICER[i] = 0xFFFFFFFF;  // Disable all interrupts
+        NVIC->ICPR[i] = 0xFFFFFFFF;  // Clear all pending interrupts
+    }
+    
+    // // 7. Установка нового вектора прерываний
+    SCB->VTOR = MAIN_FIRMWARE;
+    
+    // // 8. Установка указателя стека из основной прошивки
+    __set_MSP(*(__IO uint32_t*)MAIN_FIRMWARE);
+    
+    // // 9. Барьеры памяти для гарантии выполнения всех операций
+    __DSB();
+    __ISB();
+    
+    // // 10. Получаем адрес Reset_Handler основной прошивки и прыгаем
     void (*JumpToApplication)(void);
     uint32_t JumpAddress;
-    JumpAddress = *(__IO uint32_t*) (MAIN_FIRMWARE + 4); // здесь должно быть " + 4 ", а в скрипте компоновщика " - 8 " !!
+    JumpAddress = *(__IO uint32_t*)(MAIN_FIRMWARE + 4);
     JumpToApplication = (void (*)(void))JumpAddress;
-    LL_USART_Disable(USART2);
+    USART2_Send_responce(response::ok);
     JumpToApplication();
+    
+    // Этот код никогда не должен выполниться
+    while (1){
+        // USART2_Send_responce(response::fail);
+    };
 }
 
 void Set_N(const int n) {
