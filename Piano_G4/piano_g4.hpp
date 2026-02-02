@@ -16,7 +16,7 @@ extern "C" {
     using uint = unsigned int;
     using cuint = const uint;
 
-    #define CHAddr 1
+    #define CHAddr 5
     
     #if CHAddr > 13
     #define CHipForNoteOFF
@@ -94,6 +94,8 @@ extern "C" {
     subcommand service_commands = working;
     int service_flag = 0;
 
+    void check();
+    void service();
     void resetData();
     void communication();
     void calibration();

@@ -1,15 +1,13 @@
 #include "g4_bootloader.h"
 
-__attribute__((aligned(32))) volatile uint32_t ChipN_32 = 0x35; // <<<<< номер чипа указать здесь (который запишется в FLASH в первый раз)
+__attribute__((aligned(32))) volatile uint32_t ChipN_32 = 0x5;
 
 __attribute__((aligned(32))) volatile uint32_t bin_data_32[512] = {};
 const uint32_t bin_data_32_length = sizeof(bin_data_32); // 2 kB
 
 static const uint32_t ADRESS_CHIP_NUMBER = 0x08003800; // здесь храним номер чипа
 static const uint32_t MAIN_FIRMWARE = 0x08008000; // здесь основная прошивка // TODO MAIN_FIRMWARE?
-
-static inline void uint32_to_bytes_pointer(uint32_t value, uint8_t* bytes);
-static inline uint32_t bytes_to_uint32_pointer(const uint8_t* bytes);
+static volatile uint32_t ADRESS_FOR_JUMP = 0; // указать куда прыгнуть
 
 // settings
 __attribute__((aligned(8))) uint8_t tx_s[5] = { };
@@ -20,19 +18,6 @@ const int rx_settings_length = sizeof(rx_s);
 volatile int flag_for_jump = 0;
 
 void g4_bootloader() {
-
-// #define testt
-
-#ifdef testt // считываем номер чипа из памяти (или если надо записываем)
-    FlashPageInfo_t info = GetPageAndBank(ADRESS_CHIP_NUMBER, 1);
-    Erase(info.start_page, info.bank); // очистить номер чипа, если надо обновить номер
-#endif
-    Read_uint32(ADRESS_CHIP_NUMBER, &ChipN_32, 1);
-    if (ChipN_32 == 0xFFFFFFFF) {
-        FlashPageInfo_t info = GetPageAndBank(ADRESS_CHIP_NUMBER, 1);
-        Erase(info.start_page, info.bank); // очистить номер чипа
-        Flash(ADRESS_CHIP_NUMBER, (uint64_t*)ChipN_32, 1u);
-    }
 
     // UART init
     LL_USART_DisableDirectionTx(USART2); // один или несколько MCU должны быть подтянуты к pull_UP ! // надо ли? проверить..
@@ -45,67 +30,251 @@ void g4_bootloader() {
     LL_USART_Enable(USART2);
     LL_USART_DisableDirectionTx(USART2);   // один или несколько MCU должны быть подтянуты к pull_UP !
 
+    LL_mDelay(1);
+
+
+    Set_tx_s((uint8_t)ChipN_32, 0, 0, 0, 0);  // DEBUG
+    USART2_Send_settings();
+
+
+
+    #define testt // TODO это пока для тестов, можно потом отключить
+
+#ifdef testt // считываем номер чипа из памяти (или если надо записываем)
+    FlashPageInfo_t info = GetPageAndBank(ADRESS_CHIP_NUMBER, 1);
+    Erase(info.start_page, info.bank); // очистить номер чипа, если надо обновить номер
+#endif
+    Read_uint32(ADRESS_CHIP_NUMBER, &ChipN_32, 1);
+    if (ChipN_32 == 0xFFFFFFFF) {
+
+        Set_tx_s((uint8_t)ChipN_32, 0, 0, 0, 1); // DEBUG
+        USART2_Send_settings();
+
+
+        FlashPageInfo_t info = GetPageAndBank(ADRESS_CHIP_NUMBER, 1);
+        Erase(info.start_page, info.bank); // очистить номер чипа
+
+        Set_tx_s((uint8_t)ChipN_32, 0, 0, 0, 2); // DEBUG
+        USART2_Send_settings();
+
+        // Flash(ADRESS_CHIP_NUMBER, (uint32_t*)ChipN_32, 1u);
+        Flash_uint32(ADRESS_CHIP_NUMBER, &ChipN_32, 1);
+
+
+        Set_tx_s((uint8_t)ChipN_32, 0, 0, 0, 3); // DEBUG
+        USART2_Send_settings();
+
+    }
+
+
+    Set_tx_s((uint8_t)ChipN_32, 0, 0, 0, 4); // DEBUG
+    USART2_Send_settings();
+
+
+
     tx_s[0] = (uint8_t)ChipN_32;
     rx_s[0] = (uint8_t)ChipN_32;
 
     while (1) {
-        if (flag_for_jump) {
+        if (flag_for_jump == 1) {
             USART2_Send_responce(response::ok);
-            Jump_to_app();
+            Jump_to_app(MAIN_FIRMWARE);
+        }
+        if (flag_for_jump == 2) {
+            USART2_Send_responce(response::ok);
+            Jump_to_app(ADRESS_FOR_JUMP); // TODO по указанному адресу прыжок
         }
     }
 }
 
 void communication() {
 
-    USART2_Receive_settings();
+    USART2_Receive_settings_after_number();
     const uint8_t rx_command = rx_s[0];
 
-    if (rx_command == command::reset) { // ok
-        USART2_Send_responce(response::ok);
-        Reset();
+    if (rx_command == command_for_flash_g4::echo) { // ok
+        Set_tx_s((uint8_t)ChipN_32, 0, 0, 0, 0);  // TODO void send adress and 0
+        USART2_Send_settings();
     }
 
-    if (rx_command == command::jump_to_piano_g4) { // TODO адрес для прыжка добавить
+    if (rx_command == command_for_flash_g4::jump_to_piano_g4) { // ok
         USART2_Send_responce(response::ok);
         flag_for_jump = 1;
     }
 
-    // if (rx_command == command::set_number) { // ok
-    //     Set_N(rx_s[1]);
-    //     Set_tx_s((uint8_t)ChipN_32, 0, 0, 0, 0);
-    //     USART2_Send_settings(); // TODO void send adress and 0
-    //     Set_tx_s(0, LL_USART_GetNodeAddress(USART2), 0, 0, 0);
-    //     USART2_Send_settings();
-    // }
+    if (rx_command == command_for_flash_g4::reset) { // ok
+        USART2_Send_responce(response::ok);
+        Reset();
+    }
 
-    if (rx_command == command::data_from_H7_to_array_g4) { // ок
+    if (rx_command == command_for_flash_g4::data_from_H7_to_array_g4) { // ок
         From_H7_to_array_g4();
     }
 
-    if (rx_command == command::data_from_array_g4_to_H7) { // --
-        From_array_g4_to_H7();
-    }
-
-    if (rx_command == command::copy_array_to_flash) { // ok
+    if (rx_command == command_for_flash_g4::copy_array_to_flash_g4) { // ok
         Copy_array_to_flash();
     }
 
-    if (rx_command == command::echo) { // ok
-        Set_tx_s((uint8_t)ChipN_32, 0, 0, 0, 0);  // TODO void send adress and 0
-        USART2_Send_settings();
+    if (rx_command == command_for_flash_g4::jump_g4_to_adress) { // TODO доделать прыжок
+        USART2_Send_responce(response::ok);
+
+        // TODO получить адресс ADRESS_FOR_JUMP
+
+        flag_for_jump = 2;
     }
 }
+
+void Jump_to_app(const uint32_t addr) {
+    // 1. Отключаем UART и другую периферию
+    // LL_USART_RequestRxDataFlush(USART2); // TODO ? удалить это ?
+    // LL_USART_RequestEnterMuteMode(USART2);
+    // LL_USART_DisableIT_RXNE_RXFNE(USART2);
+    // LL_USART_Disable(USART2);
+
+    // 2. Деинициализация HAL (сбрасывает SysTick и другие настройки)
+    HAL_DeInit();
+
+    // 3. Сброс тактирования в дефолтное состояние
+    HAL_RCC_DeInit();
+
+    // 4. Отключаем все прерывания
+    // __disable_irq();
+
+    // 5. Отключаем SysTick (критично!)
+    SysTick->CTRL = 0;
+    SysTick->LOAD = 0;
+    SysTick->VAL = 0;
+
+    // 6. Очищаем все pending прерывания
+    for (uint8_t i = 0; i < 8; i++) {
+        NVIC->ICER[i] = 0xFFFFFFFF;  // Disable all interrupts
+        NVIC->ICPR[i] = 0xFFFFFFFF;  // Clear all pending interrupts
+    }
+
+    // 7. Установка нового вектора прерываний
+    SCB->VTOR = addr;
+
+    // 8. Установка указателя стека из основной прошивки
+    __set_MSP(*(__IO uint32_t*)addr);
+
+    // 9. Барьеры памяти для гарантии выполнения всех операций
+    __DSB();
+    __ISB();
+
+    // 10. Получаем адрес Reset_Handler основной прошивки и прыгаем
+    void (*JumpToApplication)(void);
+    uint32_t JumpAddress;
+    JumpAddress = *(__IO uint32_t*)(addr + 4);
+    JumpToApplication = (void (*)(void))JumpAddress;
+    JumpToApplication();
+
+    // Этот код никогда не должен выполниться
+    while (1);
+}
+
+void Reset() {
+    LL_mDelay(200); // TODO ?
+    NVIC_SystemReset();
+}
+
+void From_H7_to_array_g4() {
+    // *  **  **  **  **  **  **  **  **  **  **  **  **  **  **  **  **  **  **  **  **  **  *
+    Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает 0x11, 0x12, 0x13, 0x14
+    USART2_Send_settings();
+    // -   - -   - - -   - -   - - -   - -   - - -   - -   - - -   - -   - - -   - -   - - -   
+
+
+    for (uint32_t i = 0; i < 512; ++i) {// 2kB (4*512) размер пакета с прошивкой
+        USART2_Receive_settings();
+        bin_data_32[i] = bytes_to_uint32_pointer(rx_s);
+        Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], (uint8_t)i); // отвечает то, что получил
+        USART2_Send_settings();
+    }
+
+    USART2_Send_responce(response::ok);
+}
+
+void Copy_array_to_flash() {
+
+    Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает 0x15 0x61 0x62 0x63 0x64
+    USART2_Send_settings();
+
+    // **  ****  ****  ****  ****  ****  ****  ****  ****  **
+
+
+    // 1 получить адрес для памяти, куда сохранить массив
+    USART2_Receive_settings();
+
+
+    // 2 послать адрес в ответ на проверку
+    Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает форматированным адресом
+    USART2_Send_settings();
+    // const uint32_t addr_raw = bytes_to_uint32_pointer(&rx_s[1]);
+    const uint32_t addr = bytes_to_uint32_pointer(rx_s);
+
+
+    // 3 если ок, то записываем в память..
+    USART2_Receive_settings();
+
+    int bug = 0;
+    if (rx_s[0] == response::ok) {
+
+        FlashPageInfo_t info = GetPageAndBank(addr, bin_data_32_length);
+        Erase(info.start_page, info.bank);
+
+        // 3.2
+        Set_tx_s(0x32, 0x32, 0x32, 0x32, 0x32);
+        USART2_Send_settings();
+
+        // Гарантируем завершение Erase перед Flash
+        __DSB();
+        __ISB();
+
+        Flash_uint32(addr, bin_data_32, bin_data_32_length);
+
+        // Гарантируем завершение Flash перед чтением
+        __DSB();
+        __ISB();
+
+        // 3.5
+        Set_tx_s(0x35, 0x35, 0x35, 0x35, 0x35);
+        USART2_Send_settings();
+
+        // Проверка записанных данных - прямое сравнение с памятью
+        volatile uint32_t* flash_ptr = (volatile uint32_t*)addr;
+        for (uint32_t i = 0; i < (bin_data_32_length / 4); ++i) {
+            if (bin_data_32[i] != flash_ptr[i]) {
+                ++bug;
+            }
+        }
+    }
+
+    // 4
+    if (bug) {
+        USART2_Send_responce(response::fail);
+    }
+    else {
+        USART2_Send_responce(response::ok);
+    }
+}
+
 
 void USART2_IRQ() {
     if (LL_USART_IsActiveFlag_RXNE_RXFNE(USART2)) { // здесь прерывание, если адрес UART совпал
         communication();
-        // LL_USART_RequestRxDataFlush(USART2);   // сбрасывает RXNE флаг
+        // LL_USART_RequestRxDataFlush(USART2);   // сбрасывает RXNE флаг // TODO и без этого всё работает?
         LL_USART_RequestEnterMuteMode(USART2); // ставит USART в MuteMode и сбрасывает флаг RWU.
     }
 }
 
-// UART Send-Recive
+void Set_tx_s(uint8_t a, uint8_t b, uint8_t c, uint8_t d, uint8_t e) {
+    tx_s[0] = a;
+    tx_s[1] = b;
+    tx_s[2] = c;
+    tx_s[3] = d;
+    tx_s[4] = e;
+}
+
 void USART2_Send_settings() {
     LL_USART_EnableDirectionTx(USART2); // отправлять только при ВЫКЛюченных остальных слэйв-трансляторах.. иначе замыкание
     while (!LL_USART_IsActiveFlag_TXE(USART2)) {}
@@ -135,7 +304,7 @@ void USART2_Send_responce(response r) {
     LL_USART_ClearFlag_TC(USART2);
 }
 
-void USART2_Receive_settings() {
+void USART2_Receive_settings_after_number() {
     while (!LL_USART_IsActiveFlag_RXNE(USART2)) {}
     rx_s[0] = LL_USART_ReceiveData9(USART2);
     for (int i = 0; i < rx_settings_length; i++) {
@@ -143,31 +312,23 @@ void USART2_Receive_settings() {
         rx_s[i] = LL_USART_ReceiveData9(USART2);
     }
     LL_USART_RequestRxDataFlush(USART2);
-    // LL_USART_RequestEnterMuteMode(USART2);
+    // LL_USART_RequestEnterMuteMode(USART2); // TODO удалить?
 }
 
-void USART2_Receive_settings2() {
+void USART2_Receive_settings() {
     while (!LL_USART_IsActiveFlag_RXNE(USART2)) {}
-    // rx_s[0] = LL_USART_ReceiveData9(USART2);
+    // rx_s[0] = LL_USART_ReceiveData9(USART2);// TODO удалить?
     for (int i = 0; i < rx_settings_length; i++) {
         while (!LL_USART_IsActiveFlag_RXNE(USART2)) {}
         rx_s[i] = LL_USART_ReceiveData9(USART2);
     }
     LL_USART_RequestRxDataFlush(USART2);
-    // LL_USART_RequestEnterMuteMode(USART2);
-}
-//---------------------------------
-
-void Unlock() {
-    HAL_FLASH_Unlock();
+    // LL_USART_RequestEnterMuteMode(USART2);// TODO удалить?
 }
 
-void Lock() {
-    HAL_FLASH_Lock();
-}
 
 void Erase(uint32_t Page, uint32_t Banks) {
-    Unlock();
+    HAL_FLASH_Unlock();
     // Использование низкоуровневой функции FLASH_PageErase требует ручного управления!
     FLASH_PageErase(Page, Banks);
 
@@ -185,10 +346,10 @@ void Erase(uint32_t Page, uint32_t Banks) {
 
     // Барьер памяти перед разблокировкой
     __DMB();
-    Lock();
+    HAL_FLASH_Lock();
 }
 
-void Flash(uint32_t Address, uint64_t* Data, uint32_t size) {
+void Flash(uint32_t Address, uint64_t* Data, uint32_t size) { // TODO использовать более новую версию?
     // ВАЖНО: Проверяем, что адрес выровнен по 8 байт для DOUBLEWORD
     if (Address % 8 != 0) {
         // Ошибка выравнивания! Адрес должен быть кратен 8
@@ -200,7 +361,7 @@ void Flash(uint32_t Address, uint64_t* Data, uint32_t size) {
         return;
     }
 
-    Unlock();
+    HAL_FLASH_Unlock();
 
     // Барьер памяти перед началом операций
     __DMB();
@@ -245,89 +406,16 @@ void Flash(uint32_t Address, uint64_t* Data, uint32_t size) {
             // Обработка ошибки записи
             // uint32_t error = HAL_FLASH_GetError();
             __DMB();
-            Lock();
+            HAL_FLASH_Lock();
             return;
         }
     }
 
     // Барьер памяти перед завершением
     __DMB();
-    Lock();
+    HAL_FLASH_Lock();
 }
 
-void Read(uint32_t Address, uint8_t* pData, uint32_t Size) { // TODO deprecated!
-
-    if (pData == NULL) {
-        return;
-    }
-
-    // Проверка, что адрес находится в области флеш-памяти
-    // Для STM32G474CBT6: флеш от 0x08000000 до 0x08020000 (128KB)
-    if (Address < FLASH_BASE || Address >= (FLASH_BASE + FLASH_SIZE)) {
-        return;
-    }
-
-    // Проверка, что чтение не выходит за границы флеш-памяти
-    if ((Address + Size) > (FLASH_BASE + FLASH_SIZE)) {
-        return;
-    }
-
-    // Прямое чтение из памяти побайтно
-    uint8_t* pFlashAddr = (uint8_t*)Address;
-    for (uint32_t i = 0; i < Size; i++) {
-        pData[i] = pFlashAddr[i];
-    }
-}
-
-/**
- * @brief Чтение данных из Flash памяти в формате uint32_t
- * @param Address: Адрес начала чтения во Flash (должен быть выровнен по 4 байта)
- * @param pData: Указатель на массив uint32_t для сохранения прочитанных данных
- * @param Size: Размер данных в БАЙТАХ (не в элементах uint32_t!)
- * @note  Функция безопасна для вызова из прерывания
- * @note  Размер Size будет округлен вверх до кратного 4
- *
- * Пример использования:
- * __attribute__((aligned(32))) volatile uint32_t bin_data_32[512];
- * Read_uint32(0x08008000, bin_data_32, 2048); // Прочитать 2048 байт (512 uint32_t)
- */
-void Read_uint32(uint32_t Address, volatile uint32_t* pData, uint32_t Size) {
-
-    if (pData == NULL || Size == 0) {
-        return;
-    }
-
-    // Проверка, что адрес находится в области флеш-памяти
-    if (Address < FLASH_BASE || Address >= (FLASH_BASE + FLASH_SIZE)) {
-        return;
-    }
-
-    // Проверка выравнивания адреса по 4 байта для оптимальной работы
-    if (Address % 4 != 0) {
-        return;
-    }
-
-    // Вычисляем количество uint32_t элементов (округляем вверх)
-    uint32_t count = (Size + 3) / 4;
-
-    // Проверка, что чтение не выходит за границы флеш-памяти
-    if ((Address + (count * 4)) > (FLASH_BASE + FLASH_SIZE)) {
-        return;
-    }
-
-    // Прямое чтение из памяти uint32_t словами (быстрее чем побайтно)
-    volatile uint32_t* pFlashAddr = (volatile uint32_t*)Address;
-
-    // Используем критическую секцию для безопасности вызова из прерывания
-    uint32_t primask = __get_PRIMASK();
-    // __disable_irq();
-
-    for (uint32_t i = 0; i < count; i++) {
-        pData[i] = pFlashAddr[i];
-    }
-
-    __set_PRIMASK(primask);
-}
 
 /**
  * @brief Запись данных в Flash память в формате uint32_t
@@ -348,14 +436,14 @@ void Read_uint32(uint32_t Address, volatile uint32_t* pData, uint32_t Size) {
 void Flash_uint32(uint32_t Address, volatile uint32_t* Data, uint32_t size) {
     // Проверка выравнивания адреса по 8 байт для DOUBLEWORD
     if (Address % 8 != 0) {
-        Set_tx_s(0x11, 0x11, 0x11, 0x11, 0x11);
+        Set_tx_s(response::fail, 0x11, 0x11, 0x11, 0x11);
         USART2_Send_settings();
         return;
     }
 
     // Проверяем корректность параметров
     if (size == 0 || Data == NULL) {
-        Set_tx_s(0x22, 0x22, 0x22, 0x22, 0x22);
+        Set_tx_s(response::fail, 0x22, 0x22, 0x22, 0x22);
         USART2_Send_settings();
         return;
     }
@@ -364,7 +452,7 @@ void Flash_uint32(uint32_t Address, volatile uint32_t* Data, uint32_t size) {
     uint32_t primask = __get_PRIMASK();
     // __disable_irq();
 
-    Unlock();
+    HAL_FLASH_Unlock();
 
     // Барьер памяти перед началом операций
     __DMB();
@@ -419,115 +507,64 @@ void Flash_uint32(uint32_t Address, volatile uint32_t* Data, uint32_t size) {
         __DMB();
 
         FLASH_WaitForLastOperation(FLASH_TIMEOUT_VALUE);
-
-        // Проверяем статус
-        // if (status != HAL_OK) {
-        //     __DMB();
-        //     Lock();
-        //     __set_PRIMASK(primask);
-        //     return;
-        // }
     }
 
     // Барьер памяти перед завершением
     __DMB();
-    Lock();
+    HAL_FLASH_Lock();
 
     __set_PRIMASK(primask);
 }
 
-void Reset() {
-    // LL_mDelay(20); // TODO ?
-    // NVIC_SystemReset();
-}
+/**
+ * @brief Чтение данных из Flash памяти в формате uint32_t
+ * @param Address: Адрес начала чтения во Flash (должен быть выровнен по 4 байта)
+ * @param pData: Указатель на массив uint32_t для сохранения прочитанных данных
+ * @param Size: Размер данных в БАЙТАХ (не в элементах uint32_t!)
+ * @note  Функция безопасна для вызова из прерывания
+ * @note  Размер Size будет округлен вверх до кратного 4
+ *
+ * Пример использования:
+ * __attribute__((aligned(32))) volatile uint32_t bin_data_32[512];
+ * Read_uint32(0x08008000, bin_data_32, 2048); // Прочитать 2048 байт (512 uint32_t)
+ */
+void Read_uint32(uint32_t Address, volatile uint32_t* pData, uint32_t Size) {
 
-void Jump_to_app() {
-    // 1. Отключаем UART и другую периферию
-    // LL_USART_RequestRxDataFlush(USART2);
-    // LL_USART_RequestEnterMuteMode(USART2);
-    // LL_USART_DisableIT_RXNE_RXFNE(USART2);
-    // LL_USART_Disable(USART2);
+    if (pData == NULL || Size == 0) {
+        return;
+    }
 
-    // 2. Деинициализация HAL (сбрасывает SysTick и другие настройки)
-    HAL_DeInit();
+    // Проверка, что адрес находится в области флеш-памяти
+    if (Address < FLASH_BASE || Address >= (FLASH_BASE + FLASH_SIZE)) {
+        return;
+    }
 
-    // 3. Сброс тактирования в дефолтное состояние
-    HAL_RCC_DeInit();
+    // Проверка выравнивания адреса по 4 байта для оптимальной работы
+    if (Address % 4 != 0) {
+        return;
+    }
 
-    // 4. Отключаем все прерывания
+    // Вычисляем количество uint32_t элементов (округляем вверх)
+    uint32_t count = (Size + 3) / 4;
+
+    // Проверка, что чтение не выходит за границы флеш-памяти
+    if ((Address + (count * 4)) > (FLASH_BASE + FLASH_SIZE)) {
+        return;
+    }
+
+    // Прямое чтение из памяти uint32_t словами (быстрее чем побайтно)
+    volatile uint32_t* pFlashAddr = (volatile uint32_t*)Address;
+
+    // Используем критическую секцию для безопасности вызова из прерывания
+    uint32_t primask = __get_PRIMASK();
     // __disable_irq();
 
-    // 5. Отключаем SysTick (критично!)
-    SysTick->CTRL = 0;
-    SysTick->LOAD = 0;
-    SysTick->VAL = 0;
-
-    // 6. Очищаем все pending прерывания
-    for (uint8_t i = 0; i < 8; i++) {
-        NVIC->ICER[i] = 0xFFFFFFFF;  // Disable all interrupts
-        NVIC->ICPR[i] = 0xFFFFFFFF;  // Clear all pending interrupts
+    for (uint32_t i = 0; i < count; i++) {
+        pData[i] = pFlashAddr[i];
     }
 
-    // 7. Установка нового вектора прерываний
-    SCB->VTOR = MAIN_FIRMWARE;
-
-    // 8. Установка указателя стека из основной прошивки
-    __set_MSP(*(__IO uint32_t*)MAIN_FIRMWARE);
-
-    // 9. Барьеры памяти для гарантии выполнения всех операций
-    __DSB();
-    __ISB();
-
-    // 10. Получаем адрес Reset_Handler основной прошивки и прыгаем
-    void (*JumpToApplication)(void);
-    uint32_t JumpAddress;
-    JumpAddress = *(__IO uint32_t*)(MAIN_FIRMWARE + 4);
-    JumpToApplication = (void (*)(void))JumpAddress;
-    JumpToApplication();
-
-    // Этот код никогда не должен выполниться
-    while (1);
+    __set_PRIMASK(primask);
 }
-
-// void Set_N(uint32_t n) {
-    //     ChipN_32 = 0;
-    // // FlashPageInfo_t info = GetPageAndBank(ADRESS_CHIP_NUMBER, 1);
-    // // Erase(info.start_page, info.bank); // очистить номер чипа
-    // uint64_t vrem[1] = { (uint64_t)n };
-    // Flash(ADRESS_CHIP_NUMBER, vrem, 1u);
-    // // Flash_uint32(ADRESS_CHIP_NUMBER, &n, 1);
-    // // Read_uint32(ADRESS_CHIP_NUMBER, &ChipN_32, 1);
-    // // LL_USART_Disable(USART2);
-    // // LL_USART_ConfigNodeAddress(USART2, LL_USART_ADDRESS_DETECT_7B, ChipN_32);
-    // LL_USART_Enable(USART2);
-// }
-
-void From_H7_to_array_g4() {
-    // *  **  **  **  **  **  **  **  **  **  **  **  **  **  **  **  **  **  **  **  **  **  *
-    Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает 0x11, 0x12, 0x13, 0x14
-    USART2_Send_settings();
-    // -   - -   - - -   - -   - - -   - -   - - -   - -   - - -   - -   - - -   - -   - - -   
-
-
-    for (uint32_t i = 0; i < 512; ++i) {// 2kB (4*512) размер пакета с прошивкой
-        USART2_Receive_settings2();
-        bin_data_32[i] = bytes_to_uint32_pointer(rx_s);
-        Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], (uint8_t)i); // отвечает то, что получил
-        USART2_Send_settings();
-    }
-
-    USART2_Send_responce(response::ok);
-}
-
-void From_array_g4_to_H7() { // -----------------------------------------
-    // for (int i = 0; i < bin_data_length;) {
-    //     *reinterpret_cast<uint32_t*>(rx_s[i + 1]) = *reinterpret_cast<uint32_t*>(bin_data[i]);
-    //     USART2_Send_settings();
-    //     i += 4;
-    // }
-    // USART2_Send_responce(response::ok);
-}
-
 
 
 static inline void uint32_to_bytes_pointer(uint32_t value, uint8_t* bytes) {
@@ -536,79 +573,6 @@ static inline void uint32_to_bytes_pointer(uint32_t value, uint8_t* bytes) {
 
 static inline uint32_t bytes_to_uint32_pointer(const uint8_t* bytes) {
     return *((uint32_t*)bytes); // требуется выравнивание !
-}
-
-
-void Copy_array_to_flash() {
-
-    Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает 0x06 0x61 0x62 0x63 0x64
-    USART2_Send_settings();
-
-    // **  ****  ****  ****  ****  ****  ****  ****  ****  **
-
-
-    // 1 получить адрес для памяти, куда сохранить массив
-    USART2_Receive_settings2();
-
-
-    // 2 послать адрес в ответ на проверку
-    Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает форматированным адресом
-    USART2_Send_settings();
-    // const uint32_t addr_raw = bytes_to_uint32_pointer(&rx_s[1]);
-    const uint32_t addr = bytes_to_uint32_pointer(rx_s);
-
-
-    // 3 если ок, то записываем в память..
-    USART2_Receive_settings2();
-
-    int bug = 0;
-    if (rx_s[0] == response::ok) {
-
-        FlashPageInfo_t info = GetPageAndBank(addr, bin_data_32_length);
-        Erase(info.start_page, info.bank);
-
-        // 3.2
-        Set_tx_s(0x32, 0x32, 0x32, 0x32, 0x32);
-        USART2_Send_settings();
-
-        // Гарантируем завершение Erase перед Flash
-        __DSB();
-        __ISB();
-
-        Flash_uint32(addr, bin_data_32, bin_data_32_length);
-
-        // Гарантируем завершение Flash перед чтением
-        __DSB();
-        __ISB();
-
-        // 3.5
-        Set_tx_s(0x35, 0x35, 0x35, 0x35, 0x35);
-        USART2_Send_settings();
-
-        // Проверка записанных данных - прямое сравнение с памятью
-        volatile uint32_t* flash_ptr = (volatile uint32_t*)addr;
-        for (uint32_t i = 0; i < (bin_data_32_length / 4); ++i) {
-            if (bin_data_32[i] != flash_ptr[i]) {
-                ++bug;
-            }
-        }
-    }
-
-    // 4
-    if (bug) {
-        USART2_Send_responce(response::fail);
-    }
-    else {
-        USART2_Send_responce(response::ok);
-    }
-}
-
-void Set_tx_s(uint8_t a, uint8_t b, uint8_t c, uint8_t d, uint8_t e) {
-    tx_s[0] = a;
-    tx_s[1] = b;
-    tx_s[2] = c;
-    tx_s[3] = d;
-    tx_s[4] = e;
 }
 
 /**

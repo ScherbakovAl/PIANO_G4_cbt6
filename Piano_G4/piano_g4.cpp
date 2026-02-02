@@ -87,121 +87,135 @@ void g4() {
         windowReTRigger2 = 10 * 50; // = 50ms // TIM5 (p100us)
     }
 
-    while (1) {
-        for (uint8_t i = 0; i < 7; ++i) {
-#ifndef CHipForNoteOFF
-            if (f[i] != 0) { // for note on
-                if (f[i] == 1) {
-                    tim_off[i][0] = TIM5->CNT; // TIM5 (p100us)
-                    comp_set_data(i, comp[i][1]);
-                    f[i] = 2;
-                    comp_ext_enable(i);
-                }
-                if (f[i] == 2 && TIM5->CNT - tim_off[i][0] > windowReTRigger1) {
-                    comp_ext_disable(i);
-                    comp_set_data(i, comp[i][0]);
-                    f[i] = 0;
-                    comp_ext_enable(i);
-                }
-                if (f[i] == 3) {
-                    tim_off[i][1] = TIM5->CNT;
-                    f[i] = 4;
-                    nt n{ note + i, timeLength(tim[i][0], tim[i][1]) };
-                    dequeOn.push_back(n);
-                }
-                if (f[i] == 4 && TIM5->CNT - tim_off[i][1] > windowReTRigger2) {
-                    comp_set_data(i, comp[i][0]);
-                    f[i] = 0;
-                    comp_ext_enable(i);
+    if (chipAdress > 13) {
+        while (1) {
+            // off
+            for (uint8_t i = 0; i < 7; ++i) {
+                if (f[i] != 0) { // for note off
+                    if (f[i] == 1) {
+                        setCOMP_extVoltage_Up(i);
+                        comp_set_data(i, comp[i][0]);
+                        f[i] = 2;
+                        comp_ext_enable(i);
+                    }
+                    if (f[i] == 3) {
+                        tim_off[i][0] = TIM5->CNT;
+                        comp_set_data(i, comp[i][1]);
+                        f[i] = 4;
+                        comp_ext_enable(i);
+
+                    }
+                     // TODO видимо эту    vvvvv    секцию надо удалить      vvvvv
+                    // if (f[i] == 4 && TIM5->CNT - tim_off[i][0] > windowReTRigger1) {
+                    //     comp_ext_disable(i);
+                    //     comp_set_data(i, comp[i][2]); // ?
+                    //     setCOMP_extVoltage_Down(i); // ?
+                    //     f[i] = 0; // ?
+                    //     comp_ext_enable(i);
+                    // }
+                    if (f[i] == 5) {
+                        tim_off[i][1] = TIM5->CNT;
+                        f[i] = 6;
+                        nt n{ note + i, timeLength(tim[i][0], tim[i][1]) };
+                        dequeOn.push_back(n);
+                    }
+                    if (f[i] == 6 && TIM5->CNT - tim_off[i][1] > windowReTRigger2) {
+                        comp_set_data(i, comp[i][2]);
+                        setCOMP_extVoltage_Down(i);
+                        f[i] = 0;
+                        comp_ext_enable(i);
+                    }
                 }
             }
-#endif
-#ifdef CHipForNoteOFF
-            if (f[i] != 0) { // for note off
-                if (f[i] == 1) {
-                    setCOMP_extVoltage_Up(i);
-                    comp_set_data(i, comp[i][0]);
-                    f[i] = 2;
-                    comp_ext_enable(i);
-                }
-                if (f[i] == 3) {
-                    tim_off[i][0] = TIM5->CNT;
-                    comp_set_data(i, comp[i][1]);
-                    f[i] = 4;
-                    comp_ext_enable(i);
-
-                }
-                 // TODO видимо эту    vvvvv    секцию надо удалить      vvvvv
-                // if (f[i] == 4 && TIM5->CNT - tim_off[i][0] > windowReTRigger1) {
-                //     comp_ext_disable(i);
-                //     comp_set_data(i, comp[i][2]); // ?
-                //     setCOMP_extVoltage_Down(i); // ?
-                //     f[i] = 0; // ?
-                //     comp_ext_enable(i);
-                // }
-                if (f[i] == 5) {
-                    tim_off[i][1] = TIM5->CNT;
-                    f[i] = 6;
-                    nt n{ note + i, timeLength(tim[i][0], tim[i][1]) };
-                    dequeOn.push_back(n);
-                }
-                if (f[i] == 6 && TIM5->CNT - tim_off[i][1] > windowReTRigger2) {
-                    comp_set_data(i, comp[i][2]);
-                    setCOMP_extVoltage_Down(i);
-                    f[i] = 0;
-                    comp_ext_enable(i);
+            check();
+            service();
+        }
+    }
+    else {
+        while (1) {
+            // on
+            for (uint8_t i = 0; i < 7; ++i) {
+                if (f[i] != 0) { // for note on
+                    if (f[i] == 1) {
+                        tim_off[i][0] = TIM5->CNT; // TIM5 (p100us)
+                        comp_set_data(i, comp[i][1]);
+                        f[i] = 2;
+                        comp_ext_enable(i);
+                    }
+                    if (f[i] == 2 && TIM5->CNT - tim_off[i][0] > windowReTRigger1) {
+                        comp_ext_disable(i);
+                        comp_set_data(i, comp[i][0]);
+                        f[i] = 0;
+                        comp_ext_enable(i);
+                    }
+                    if (f[i] == 3) {
+                        tim_off[i][1] = TIM5->CNT;
+                        f[i] = 4;
+                        nt n{ note + i, timeLength(tim[i][0], tim[i][1]) };
+                        dequeOn.push_back(n);
+                    }
+                    if (f[i] == 4 && TIM5->CNT - tim_off[i][1] > windowReTRigger2) {
+                        comp_set_data(i, comp[i][0]);
+                        f[i] = 0;
+                        comp_ext_enable(i);
+                    }
                 }
             }
-#endif
+            check();
+            service();
         }
+    }
+}
 
-        if (!dequeOn.empty() && fl) {
-            nt x = dequeOn.front();
-            abcd a{ conv32to8(x) };
-            tx_data[0] = x.n; // TODO add "& 0xFF" ?
-            tx_data[1] = a.a;
-            tx_data[2] = a.b;
-            tx_data[3] = a.c;
-            LL_DMA_DisableChannel(DMA1, LL_DMA_CHANNEL_1);
-            LL_DMA_SetDataLength(DMA1, LL_DMA_CHANNEL_1, tx_dataLength);
-            LL_USART_ClearFlag_TC(USART2);
-            LL_TIM_ClearFlag_CC3(TIM8); // PWM - tim clk
-            LL_TIM_EnableIT_CC3(TIM8);  // PWM - tim clk
-            dequeOn.pop_front();
-            fl = 0;
-        }
+void check() {
+    if (!dequeOn.empty() && fl) {
+        nt x = dequeOn.front();
+        abcd a{ conv32to8(x) };
+        tx_data[0] = x.n; // TODO add "& 0xFF" ?
+        tx_data[1] = a.a;
+        tx_data[2] = a.b;
+        tx_data[3] = a.c;
+        LL_DMA_DisableChannel(DMA1, LL_DMA_CHANNEL_1);
+        LL_DMA_SetDataLength(DMA1, LL_DMA_CHANNEL_1, tx_dataLength);
+        LL_USART_ClearFlag_TC(USART2);
+        LL_TIM_ClearFlag_CC3(TIM8); // PWM - tim clk
+        LL_TIM_EnableIT_CC3(TIM8);  // PWM - tim clk
+        dequeOn.pop_front();
+        fl = 0;
+    }
+}
 
-        while (service_flag) {
-            if (service_commands == subcommand::working && flag_Service_command) {
+void service() {
+    while (service_flag) {
+        if (service_commands == subcommand::working && flag_Service_command) {
+            for (uint8_t i = 0; i < 7; ++i) {
+                cc_fl[i] = 1;
+            }
+            for (int a = 0; a < 4092; ++a) {
                 for (uint8_t i = 0; i < 7; ++i) {
-                    cc_fl[i] = 1;
-                }
-                for (int a = 0; a < 4092; ++a) {
-                    for (uint8_t i = 0; i < 7; ++i) {
-                        if (cc_fl[i]) {
-                            comp_set_data(i, a);
-                            if (LL_COMP_ReadOutputLevel(comp_def(i)) == LL_COMP_OUTPUT_LEVEL_LOW) {
-                                comp_calibration[i] = a;
-                                cc_fl[i] = 0;
-                            }
-                            if (a > 4090) {
-                                comp_calibration[i] = 0;
-                            }
+                    if (cc_fl[i]) {
+                        comp_set_data(i, a);
+                        if (LL_COMP_ReadOutputLevel(comp_def(i)) == LL_COMP_OUTPUT_LEVEL_LOW) {
+                            comp_calibration[i] = a;
+                            cc_fl[i] = 0;
+                        }
+                        if (a > 4090) {
+                            comp_calibration[i] = 0;
                         }
                     }
                 }
-                flag_Service_command = 0;
             }
-            if (service_commands == subcommand::exit) {
-                if (!dequeOn.empty()) dequeOn.clear();
-                for (int i = 0; i < 7; ++i) {
-                    f[i] = 0;
-                    comp_set_data(i, comp[i][0]);
-                    comp_ext_enable(i);
-                }
-                service_flag = 0;
-                USART2_Send(compN_, 0, subcommand::stop_calibration);
+            flag_Service_command = 0;
+        }
+        if (service_commands == subcommand::exit) {
+            if (!dequeOn.empty()) dequeOn.clear();
+            for (int i = 0; i < 7; ++i) {
+                f[i] = 0;
+                comp_set_data(i, comp[i][0]);
+                comp_ext_enable(i);
             }
+            service_flag = 0;
+            USART2_Send(compN_, 0, subcommand::stop_calibration);
         }
     }
 }
@@ -213,7 +227,7 @@ void resetData() {
     }
 }
 
-void comp_refresh(uint8_t &n) {
+void comp_refresh(uint8_t& n) {
     comp_ext_disable(n);
     comp_set_data(n, comp[n][0]);
     comp_ext_enable(n);
