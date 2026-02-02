@@ -9,6 +9,7 @@
 #pragma once
 
 #include "main.h"
+#include "stm32g4xx_hal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -16,15 +17,9 @@ extern "C" {
     using uint = unsigned int;
     using cuint = const uint;
 
-    #define CHAddr 5
-    
-    #if CHAddr > 13
-    #define CHipForNoteOFF
-    #endif
-    
-    const int chipAdress = CHAddr; // 1-13-on, 14-26-off
+    volatile uint32_t chipAdress = 0; // 1-13-on, 14-26-off
     const int allChipCount = 27; // до этого значения считает таймер
-    const uint8_t note = chipAdress * 7;
+
     // !!!  ***  !!!   подтяжки линий (в UART нужен UP для Tx у одного из g4)+(UP для линии прерываний)   !!!  ***  !!!
 
     // data
@@ -32,9 +27,9 @@ extern "C" {
     const int tx_dataLength = sizeof(tx_data);
 
     // settings
-    uint8_t tx_settings[5] = { chipAdress, };
+    uint8_t tx_settings[5] = { };
     const int tx_settings_length = sizeof(tx_settings);
-    uint8_t rx_settings[5] = { chipAdress, };
+    uint8_t rx_settings[5] = { };
     const int rx_settings_length = sizeof(rx_settings);
     uint8_t compN_ = 0;
     uint8_t dot_ = 0;
@@ -121,6 +116,7 @@ extern "C" {
     void COMP7_IRQ();
     void iffing(const int& a);
     COMP_TypeDef* comp_def(const int& i);
+    void Read_uint32(uint32_t Address, volatile uint32_t* pData, uint32_t Size);
 
 }
 #endif // extern "C"

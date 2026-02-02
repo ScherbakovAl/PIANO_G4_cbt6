@@ -10,10 +10,15 @@
 #include "deque"
 std::deque<nt> dequeOn;
 
+static const uint32_t ADRESS_CHIP_NUMBER = 0x08003800; // здесь храним номер чипа
+
 // main
 void g4() {
+    Read_uint32(ADRESS_CHIP_NUMBER, &chipAdress, 4);
+    static const uint8_t note = chipAdress * 7;
+    tx_settings[0] = chipAdress;
+    rx_settings[0] = chipAdress;
 
-    // init
     GPIOB->BSRR = 0x80; // pB7 // tim interrupter // чтобы включился счёт таймера с H7
 
     // TIM init
@@ -22,7 +27,6 @@ void g4() {
     LL_TIM_SetAutoReload(TIM8, allChipCount); // PWM - tim clk
     LL_TIM_OC_SetCompareCH3(TIM8, chipAdress);
     LL_TIM_EnableCounter(TIM8); // PWM - tim clk
-    //---------------------------------
 
     // UART init
     LL_USART_DisableDirectionTx(USART2); // один или несколько MCU должны быть подтянуты к pull_UP ! // надо ли? проверить..
@@ -36,14 +40,12 @@ void g4() {
     LL_USART_RequestEnterMuteMode(USART2); // ставит USART в MuteMode и сбрасывает флаг RWU.
     LL_USART_EnableDMAReq_TX(USART2);      // подсоединяет DMA к UART
     LL_USART_EnableIT_TC(USART2);          // прерывание окончания передачи
-    //---------------------------------
 
     // DMA TX
     LL_DMA_DisableChannel(DMA1, LL_DMA_CHANNEL_1);
     LL_DMA_SetPeriphAddress(DMA1, LL_DMA_CHANNEL_1, (uint32_t) & (USART2->TDR));
     LL_DMA_SetMemoryAddress(DMA1, LL_DMA_CHANNEL_1, (uint32_t)tx_data);
     LL_DMA_SetDataLength(DMA1, LL_DMA_CHANNEL_1, tx_dataLength);
-    //---------------------------------
 
     LL_DAC_Enable(DAC1, LL_DAC_CHANNEL_1);
     LL_DAC_Enable(DAC1, LL_DAC_CHANNEL_2);
@@ -70,7 +72,6 @@ void g4() {
     }
     //---------------------------------
 
-
 // можно для неполных сделать точку срабатывания высоко, выше 1000 и не будет компаратор срабатывать..
 
 // 136Mhz - speed cheep
@@ -87,8 +88,8 @@ void g4() {
         windowReTRigger2 = 10 * 50; // = 50ms // TIM5 (p100us)
     }
 
-    USART2_Send(33, 33, 33);
-
+    // USART2_Send(33, 33, 33);
+    pause(1000000);
 
     if (chipAdress > 13) {
         while (1) {
@@ -672,34 +673,67 @@ void COMP7_IRQ(void) { // line 33
 }
 //---------------------------------
 
-
-#ifndef CHipForNoteOFF
 void iffing(const int& a) {
-    if (f[a] == 0) {
-        f[a] = 1;
-        tim[a][0] = TIM2->CNT;
+    if (chipAdress > 13) { // off
+        if (f[a] == 0) {
+            f[a] = 1;
+        }
+        if (f[a] == 2) {
+            f[a] = 3;
+            tim[a][0] = TIM2->CNT;
+        }
+        if (f[a] == 4) {
+            f[a] = 5;
+            tim[a][1] = TIM2->CNT;
+        }
     }
-    if (f[a] == 2) {
-        f[a] = 3;
-        tim[a][1] = TIM2->CNT;
+    else { // on
+        if (f[a] == 0) {
+            f[a] = 1;
+            tim[a][0] = TIM2->CNT;
+        }
+        if (f[a] == 2) {
+            f[a] = 3;
+            tim[a][1] = TIM2->CNT;
+        }
     }
 }
-#endif
 
-#ifdef CHipForNoteOFF
 
-void iffing(const int& a) {
-    if (f[a] == 0) {
-        f[a] = 1;
+void Read_uint32(uint32_t Address, volatile uint32_t* pData, uint32_t Size) {
+
+    if (pData == NULL || Size == 0) {
+        return;
     }
-    if (f[a] == 2) {
-        f[a] = 3;
-        tim[a][0] = TIM2->CNT;
+
+    // Проверка, что адрес находится в области флеш-памяти
+    if (Address < FLASH_BASE || Address >= (FLASH_BASE + FLASH_SIZE)) {
+        return;
     }
-    if (f[a] == 4) {
-        f[a] = 5;
-        tim[a][1] = TIM2->CNT;
+
+    // Проверка выравнивания адреса по 4 байта для оптимальной работы
+    if (Address % 4 != 0) {
+        return;
     }
+
+    // Вычисляем количество uint32_t элементов (округляем вверх)
+    uint32_t count = (Size + 3) / 4;
+
+    // Проверка, что чтение не выходит за границы флеш-памяти
+    if ((Address + (count * 4)) > (FLASH_BASE + FLASH_SIZE)) {
+        return;
+    }
+
+    // Прямое чтение из памяти uint32_t словами (быстрее чем побайтно)
+    volatile uint32_t* pFlashAddr = (volatile uint32_t*)Address;
+
+    // Используем критическую секцию для безопасности вызова из прерывания
+    uint32_t primask = __get_PRIMASK();
+    // __disable_irq();
+
+    for (uint32_t i = 0; i < count; i++) {
+        pData[i] = pFlashAddr[i];
+    }
+
+    __set_PRIMASK(primask);
 }
-#endif
-//---------------------------------
