@@ -1,6 +1,6 @@
 #include "g4_bootloader.h"
 
-volatile uint32_t ChipN_32 = 0x5;
+volatile uint32_t ChipN_32 = { 0x5 };
 
 __attribute__((aligned(32))) volatile uint32_t bin_data_32[512] = {};
 const uint32_t bin_data_32_length = sizeof(bin_data_32); // 2 kB
@@ -32,45 +32,19 @@ void g4_bootloader() {
 
     LL_mDelay(1);
 
-
-    Set_tx_s((uint8_t)ChipN_32, 0, 0, 0, 0);  // DEBUG
-    USART2_Send_settings();
-
-
-
-    #define testt // TODO это пока для тестов, можно потом отключить
+// #define testt
 
 #ifdef testt // считываем номер чипа из памяти (или если надо записываем)
-    FlashPageInfo_t info = GetPageAndBank(ADRESS_CHIP_NUMBER, 1);
+    FlashPageInfo_t info = GetPageAndBank(ADRESS_CHIP_NUMBER, 4);
     Erase(info.start_page, info.bank); // очистить номер чипа, если надо обновить номер
 #endif
-    Read_uint32(ADRESS_CHIP_NUMBER, &ChipN_32, 1);
-    if (ChipN_32 == 0xFFFFFFFF) {
-
-        Set_tx_s((uint8_t)ChipN_32, 0, 0, 0, 1); // DEBUG
-        USART2_Send_settings();
-
-
-        FlashPageInfo_t info = GetPageAndBank(ADRESS_CHIP_NUMBER, 1);
+    uint32_t ChipN_t;
+    Read_uint32(ADRESS_CHIP_NUMBER, &ChipN_t, 4);
+    if (ChipN_t == 0xFFFFFFFF) {
+        FlashPageInfo_t info = GetPageAndBank(ADRESS_CHIP_NUMBER, 4);
         Erase(info.start_page, info.bank); // очистить номер чипа
-
-        Set_tx_s((uint8_t)ChipN_32, 0, 0, 0, 2); // DEBUG
-        USART2_Send_settings();
-
-        // Flash(ADRESS_CHIP_NUMBER, (uint32_t*)ChipN_32, 1u);
-        Flash_uint32(ADRESS_CHIP_NUMBER, &ChipN_32, 1);
-
-
-        Set_tx_s((uint8_t)ChipN_32, 0, 0, 0, 3); // DEBUG
-        USART2_Send_settings();
-
+        Flash_uint32(ADRESS_CHIP_NUMBER, &ChipN_32, 4);
     }
-
-
-    Set_tx_s((uint8_t)ChipN_32, 0, 0, 0, 4); // DEBUG
-    USART2_Send_settings();
-
-
 
     tx_s[0] = (uint8_t)ChipN_32;
     rx_s[0] = (uint8_t)ChipN_32;
@@ -468,35 +442,37 @@ void Flash_uint32(uint32_t Address, volatile uint32_t* Data, uint32_t size) {
         // Индекс в массиве uint32_t (каждый doubleword = 2 uint32_t)
         uint32_t idx = i * 2;
 
+        // Вычисляем сколько байт осталось записать
+        uint32_t remaining_bytes = size - (i * 8);
+
         // Формируем 64-битное значение из двух 32-битных
         // Little Endian: младшие биты идут первыми
-        if ((i * 8 + 8) <= size) {
-            // Полный doubleword
+        if (remaining_bytes >= 8) {
+            // Полный doubleword - два uint32_t
             current_data = ((uint64_t)Data[idx]) | (((uint64_t)Data[idx + 1]) << 32);
         }
-        else {
-         // Последний неполный doubleword - заполняем FF
-            current_data = 0xFFFFFFFFFFFFFFFF;
-            uint32_t remaining_bytes = size - (i * 8);
+        else if (remaining_bytes >= 4) {
+            // Есть хотя бы один полный uint32_t
+            current_data = ((uint64_t)Data[idx]) | 0xFFFFFFFF00000000ULL;
 
-            if (remaining_bytes >= 4) {
-                // Первые 4 байта из Data[idx]
-                current_data = (uint64_t)Data[idx];
-                if (remaining_bytes > 4) {
-                    // Частично второй uint32_t
-                    uint32_t partial = Data[idx + 1];
-                    uint32_t valid_bytes = remaining_bytes - 4;
-                    uint32_t mask = (1UL << (valid_bytes * 8)) - 1;
-                    partial &= mask;
-                    current_data |= ((uint64_t)partial) << 32;
-                }
-            }
-            else {
-             // Меньше 4 байт - только часть первого uint32_t
-                uint32_t partial = Data[idx];
-                uint32_t mask = (1UL << (remaining_bytes * 8)) - 1;
+            if (remaining_bytes > 4) {
+                // Есть еще частичный второй uint32_t
+                uint32_t partial = Data[idx + 1];
+                uint32_t valid_bytes = remaining_bytes - 4;
+                uint32_t mask = (1UL << (valid_bytes * 8)) - 1;
                 partial &= mask;
-                current_data = (uint64_t)partial;
+                current_data = ((uint64_t)Data[idx]) | (((uint64_t)partial) << 32);
+            }
+        }
+        else {
+            // Меньше 4 байт - только часть первого uint32_t
+            uint32_t partial = Data[idx];
+            uint32_t mask = (1UL << (remaining_bytes * 8)) - 1;
+            partial &= mask;
+            current_data = (uint64_t)partial;
+            // Заполняем остаток в текущем doubleword значением 0xFF
+            for (uint32_t b = remaining_bytes; b < 8; b++) {
+                current_data |= ((uint64_t)0xFF) << (b * 8);
             }
         }
 

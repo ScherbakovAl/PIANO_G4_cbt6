@@ -87,6 +87,9 @@ void g4() {
         windowReTRigger2 = 10 * 50; // = 50ms // TIM5 (p100us)
     }
 
+    USART2_Send(33, 33, 33);
+
+
     if (chipAdress > 13) {
         while (1) {
             // off
