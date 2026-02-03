@@ -6,7 +6,7 @@ __attribute__((aligned(32))) volatile uint32_t bin_data_32[512] = {};
 const uint32_t bin_data_32_length = sizeof(bin_data_32); // 2 kB
 
 static const uint32_t ADRESS_CHIP_NUMBER = 0x08003800; // здесь храним номер чипа
-static const uint32_t MAIN_FIRMWARE = 0x08008000; // здесь основная прошивка // TODO MAIN_FIRMWARE?
+static const uint32_t MAIN_FIRMWARE = 0x08008000; // здесь основная прошивка
 static volatile uint32_t ADRESS_FOR_JUMP = 0; // указать куда прыгнуть
 
 // settings
@@ -32,6 +32,8 @@ void g4_bootloader() {
 
     LL_mDelay(1);
 
+
+
 // #define testt
 
 #ifdef testt // считываем номер чипа из памяти (или если надо записываем)
@@ -48,6 +50,10 @@ void g4_bootloader() {
 
     tx_s[0] = (uint8_t)ChipN_32;
     rx_s[0] = (uint8_t)ChipN_32;
+    for (int i = 1; i < 5; ++i) {
+        tx_s[i] = 0;
+        rx_s[i] = 0;
+    }
 
     while (1) {
         if (flag_for_jump == 1) {
@@ -64,19 +70,14 @@ void g4_bootloader() {
 void communication() {
 
     USART2_Receive_settings_after_number();
-    const uint8_t rx_command = rx_s[0];
+    const uint8_t rx_command = rx_s[0]; // TODO везде проверять ответ от G4
 
-    if (rx_command == command_for_flash_g4::echo) { // ok
-        Set_tx_s((uint8_t)ChipN_32, 0, 0, 0, 0);  // TODO void send adress and 0
+    if (rx_command == command_for_flash_g4::echo_bootloader) { // ok
+        Set_tx_s((uint8_t)ChipN_32, 0, 0, 0, 0);
         USART2_Send_settings();
     }
 
-    if (rx_command == command_for_flash_g4::jump_to_piano_g4) { // ok
-        USART2_Send_responce(response::ok);
-        flag_for_jump = 1;
-    }
-
-    if (rx_command == command_for_flash_g4::reset) { // ok
+    if (rx_command == command_for_flash_g4::reset_bootloader) { // ok
         USART2_Send_responce(response::ok);
         Reset();
     }
@@ -89,65 +90,19 @@ void communication() {
         Copy_array_to_flash();
     }
 
-    if (rx_command == command_for_flash_g4::jump_g4_to_adress) { // TODO доделать прыжок
+    if (rx_command == command_for_flash_g4::jump_to_piano_g4) { // ok
         USART2_Send_responce(response::ok);
-
-        // TODO получить адресс ADRESS_FOR_JUMP
-
-        flag_for_jump = 2;
-    }
-}
-
-void Jump_to_app(const uint32_t addr) {
-    // 1. Отключаем UART и другую периферию
-    // LL_USART_RequestRxDataFlush(USART2); // TODO ? удалить это ?
-    // LL_USART_RequestEnterMuteMode(USART2);
-    // LL_USART_DisableIT_RXNE_RXFNE(USART2);
-    // LL_USART_Disable(USART2);
-
-    // 2. Деинициализация HAL (сбрасывает SysTick и другие настройки)
-    HAL_DeInit();
-
-    // 3. Сброс тактирования в дефолтное состояние
-    HAL_RCC_DeInit();
-
-    // 4. Отключаем все прерывания
-    // __disable_irq();
-
-    // 5. Отключаем SysTick (критично!)
-    SysTick->CTRL = 0;
-    SysTick->LOAD = 0;
-    SysTick->VAL = 0;
-
-    // 6. Очищаем все pending прерывания
-    for (uint8_t i = 0; i < 8; i++) {
-        NVIC->ICER[i] = 0xFFFFFFFF;  // Disable all interrupts
-        NVIC->ICPR[i] = 0xFFFFFFFF;  // Clear all pending interrupts
+        flag_for_jump = 1;
     }
 
-    // 7. Установка нового вектора прерываний
-    SCB->VTOR = addr;
-
-    // 8. Установка указателя стека из основной прошивки
-    __set_MSP(*(__IO uint32_t*)addr);
-
-    // 9. Барьеры памяти для гарантии выполнения всех операций
-    __DSB();
-    __ISB();
-
-    // 10. Получаем адрес Reset_Handler основной прошивки и прыгаем
-    void (*JumpToApplication)(void);
-    uint32_t JumpAddress;
-    JumpAddress = *(__IO uint32_t*)(addr + 4);
-    JumpToApplication = (void (*)(void))JumpAddress;
-    JumpToApplication();
-
-    // Этот код никогда не должен выполниться
-    while (1);
+    if (rx_command == command_for_flash_g4::jump_g4_to_adress) { // ok
+        USART2_Send_responce(response::ok);
+        jump_to_adress();
+    }
 }
 
 void Reset() {
-    LL_mDelay(200); // TODO ?
+    LL_mDelay(200);
     NVIC_SystemReset();
 }
 
@@ -232,6 +187,70 @@ void Copy_array_to_flash() {
     }
 }
 
+void Jump_to_app(const uint32_t addr) {
+    // 1. Отключаем UART и другую периферию
+    // LL_USART_RequestRxDataFlush(USART2); // TODO ? удалить это ?
+    // LL_USART_RequestEnterMuteMode(USART2);
+    // LL_USART_DisableIT_RXNE_RXFNE(USART2);
+    // LL_USART_Disable(USART2);
+
+    // 2. Деинициализация HAL (сбрасывает SysTick и другие настройки)
+    HAL_DeInit();
+
+    // 3. Сброс тактирования в дефолтное состояние
+    HAL_RCC_DeInit();
+
+    // 4. Отключаем все прерывания
+    // __disable_irq();
+
+    // 5. Отключаем SysTick (критично!)
+    SysTick->CTRL = 0;
+    SysTick->LOAD = 0;
+    SysTick->VAL = 0;
+
+    // 6. Очищаем все pending прерывания
+    for (uint8_t i = 0; i < 8; i++) {
+        NVIC->ICER[i] = 0xFFFFFFFF;  // Disable all interrupts
+        NVIC->ICPR[i] = 0xFFFFFFFF;  // Clear all pending interrupts
+    }
+
+    // 7. Установка нового вектора прерываний
+    SCB->VTOR = addr;
+
+    // 8. Установка указателя стека из основной прошивки
+    __set_MSP(*(__IO uint32_t*)addr);
+
+    // 9. Барьеры памяти для гарантии выполнения всех операций
+    __DSB();
+    __ISB();
+
+    // 10. Получаем адрес Reset_Handler основной прошивки и прыгаем
+    void (*JumpToApplication)(void);
+    uint32_t JumpAddress;
+    JumpAddress = *(__IO uint32_t*)(addr + 4);
+    JumpToApplication = (void (*)(void))JumpAddress;
+    JumpToApplication();
+
+    // Этот код никогда не должен выполниться
+    while (1);
+}
+
+void jump_to_adress() {
+    responder_1();
+    USART2_Send_settings(); // ответить  (ChipN_32, 0x88, 0x88, 0x88, 0x88)
+
+    // получение адреса
+    USART2_Receive_settings();
+    responder_0();
+    USART2_Send_settings(); // ответить  (полученный адрес)
+
+    // если ок, то прыгаем
+    USART2_Receive_settings();
+    if (rx_s[0] == response::ok) {
+        ADRESS_FOR_JUMP = bytes_to_uint32_pointer(tx_s);
+        flag_for_jump = 2;
+    }
+}
 
 void USART2_IRQ() {
     if (LL_USART_IsActiveFlag_RXNE_RXFNE(USART2)) { // здесь прерывание, если адрес UART совпал
@@ -247,6 +266,15 @@ void Set_tx_s(uint8_t a, uint8_t b, uint8_t c, uint8_t d, uint8_t e) {
     tx_s[2] = c;
     tx_s[3] = d;
     tx_s[4] = e;
+}
+
+void responder_0() {
+    (uint32_t&)tx_s = bytes_to_uint32_pointer(rx_s);
+}
+
+void responder_1() {
+    (uint32_t&)tx_s[1] = bytes_to_uint32_pointer(&rx_s[1]);
+    tx_s[0] = (uint8_t)ChipN_32;
 }
 
 void USART2_Send_settings() {
@@ -322,74 +350,6 @@ void Erase(uint32_t Page, uint32_t Banks) {
     __DMB();
     HAL_FLASH_Lock();
 }
-
-void Flash(uint32_t Address, uint64_t* Data, uint32_t size) { // TODO использовать более новую версию?
-    // ВАЖНО: Проверяем, что адрес выровнен по 8 байт для DOUBLEWORD
-    if (Address % 8 != 0) {
-        // Ошибка выравнивания! Адрес должен быть кратен 8
-        return;
-    }
-
-    // Проверяем корректность параметра size (должен быть > 0)
-    if (size == 0 || Data == NULL) {
-        return;
-    }
-
-    HAL_FLASH_Unlock();
-
-    // Барьер памяти перед началом операций
-    __DMB();
-
-    // Вычисляем количество DOUBLEWORD для записи
-    // Каждое DOUBLEWORD = 8 байт
-    uint32_t doublewords_count = (size + 7) / 8; // Округление вверх
-
-    // Создаем указатель на исходные данные как uint8_t для безопасного доступа
-    volatile uint8_t* src_bytes = (volatile uint8_t*)Data;
-
-    // Записываем данные в цикле
-    for (uint32_t i = 0; i < doublewords_count; i++) {
-        uint32_t current_address = Address + (i * 8);
-        uint64_t current_data;
-
-        // Безопасное копирование данных по байтам (избегаем проблем с выравниванием и volatile)
-        uint8_t* dst = (uint8_t*)&current_data;
-        uint32_t bytes_to_copy = 8;
-
-        // Если это последний элемент и size не кратен 8, обрабатываем остаток
-        if (i == doublewords_count - 1 && (size % 8) != 0) {
-            bytes_to_copy = size % 8;
-            current_data = 0xFFFFFFFFFFFFFFFF; // Заполняем FF (стертое состояние Flash)
-        }
-
-        // Копируем данные побайтно для избежания проблем с выравниванием
-        for (uint32_t j = 0; j < bytes_to_copy; j++) {
-            dst[j] = src_bytes[i * 8 + j];
-        }
-
-        // Выполняем запись с проверкой статуса
-        HAL_StatusTypeDef status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, current_address, current_data);
-
-        // Барьер памяти после записи
-        __DMB();
-
-        FLASH_WaitForLastOperation(FLASH_TIMEOUT_VALUE);
-
-        // Проверяем статус и обрабатываем ошибку:
-        if (status != HAL_OK) {
-            // Обработка ошибки записи
-            // uint32_t error = HAL_FLASH_GetError();
-            __DMB();
-            HAL_FLASH_Lock();
-            return;
-        }
-    }
-
-    // Барьер памяти перед завершением
-    __DMB();
-    HAL_FLASH_Lock();
-}
-
 
 /**
  * @brief Запись данных в Flash память в формате uint32_t

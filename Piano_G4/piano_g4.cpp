@@ -88,8 +88,7 @@ void g4() {
         windowReTRigger2 = 10 * 50; // = 50ms // TIM5 (p100us)
     }
 
-    // USART2_Send(33, 33, 33);
-    pause(1000000);
+    USART2_Send(compN_, dot_, 0);
 
     if (chipAdress > 13) {
         while (1) {
@@ -323,6 +322,7 @@ void USART2_Send(const uint8_t& compN, const uint8_t& dot, const int& value) {
     tx_settings[2] = { dot };
     tx_settings[3] = c.a;
     tx_settings[4] = c.b;
+    pause(2);
     while (!LL_USART_IsActiveFlag_TXE(USART2)) {}
     for (int i = 0; i < tx_settings_length; i++) {
         LL_USART_TransmitData9(USART2, tx_settings[i]);
