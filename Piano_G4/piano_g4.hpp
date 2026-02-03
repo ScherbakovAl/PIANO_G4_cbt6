@@ -50,16 +50,16 @@ extern "C" {
     volatile int fl = 1;
     volatile int flag_Service_command = 1;
 
-	enum command { // 
-		sync_timer = 1,
-		cal,
-		read_comp_value, // TODO добавить проверки (принять ответ)
-		set_comp_value, // TODO добавить проверки (принять ответ)
-		read_comp_setting, // TODO реализовать
-		all_calib,
-		reset, // TODO реализовать
-		echo = 11 // TODO реализовать для основной прошивки
-	};
+    enum command { // 
+        sync_timer = 1,
+        cal,
+        read_comp_value, // TODO добавить проверки (принять ответ)
+        set_comp_value, // TODO добавить проверки (принять ответ)
+        read_comp_setting, // TODO реализовать
+        all_calib,
+        reset_to_bootloader, // TODO реализовать
+        echo = 11 // TODO реализовать для основной прошивки
+    };
 
     enum subcommand {
         start_calibration = 1,
@@ -68,6 +68,11 @@ extern "C" {
         working,
         nothing,
         exit
+    };
+
+    enum state {
+        bootloader = 1,
+        piano
     };
 
     struct conv16to8x2 {

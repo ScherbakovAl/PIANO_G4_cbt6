@@ -4,7 +4,7 @@
 #include "stm32g4xx_ll_utils.h"
 #include "stm32g4xx_ll_usart.h"
 
-enum command_for_flash_g4 {
+enum command_bootloader {
     echo_bootloader = 11,
     reset_bootloader, // 200ms delay // TODO надо реализовать
     data_from_H7_to_array_g4,
@@ -16,6 +16,11 @@ enum command_for_flash_g4 {
 enum response {
     ok = 0x0C,
     fail = 0xDD
+};
+
+enum state {
+    bootloader = 1,
+    piano
 };
 
 // Структура для хранения информации о странице и банке

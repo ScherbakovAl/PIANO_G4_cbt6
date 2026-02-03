@@ -1,6 +1,6 @@
 #include "g4_bootloader.h"
 
-volatile uint32_t ChipN_32 = { 0x3 }; // <<<< номер чипа здесь указывается
+volatile uint32_t ChipN_32 = { 0x5 }; // <<<< номер чипа здесь указывается
 
 __attribute__((aligned(32))) volatile uint32_t bin_data_32[512] = {};
 const uint32_t bin_data_32_length = sizeof(bin_data_32); // 2 kB
@@ -72,30 +72,30 @@ void communication() {
     USART2_Receive_settings_after_number();
     const uint8_t rx_command = rx_s[0]; // TODO везде проверять ответ от G4
 
-    if (rx_command == command_for_flash_g4::echo_bootloader) { // ok
-        Set_tx_s((uint8_t)ChipN_32, 0, 0, 0, 0);
+    if (rx_command == command_bootloader::echo_bootloader) { // ok
+        Set_tx_s((uint8_t)ChipN_32, 0, 0, 0, (uint8_t)state::bootloader);
         USART2_Send_settings();
     }
 
-    if (rx_command == command_for_flash_g4::reset_bootloader) { // ok
+    if (rx_command == command_bootloader::reset_bootloader) { // ok
         USART2_Send_responce(response::ok);
         Reset();
     }
 
-    if (rx_command == command_for_flash_g4::data_from_H7_to_array_g4) { // ок
+    if (rx_command == command_bootloader::data_from_H7_to_array_g4) { // ок
         From_H7_to_array_g4();
     }
 
-    if (rx_command == command_for_flash_g4::copy_array_to_flash_g4) { // ok
+    if (rx_command == command_bootloader::copy_array_to_flash_g4) { // ok
         Copy_array_to_flash();
     }
 
-    if (rx_command == command_for_flash_g4::jump_to_piano_g4) { // ok
+    if (rx_command == command_bootloader::jump_to_piano_g4) { // ok
         USART2_Send_responce(response::ok);
         flag_for_jump = 1;
     }
 
-    if (rx_command == command_for_flash_g4::jump_g4_to_adress) { // ok
+    if (rx_command == command_bootloader::jump_g4_to_adress) { // ok
         USART2_Send_responce(response::ok);
         jump_to_adress();
     }

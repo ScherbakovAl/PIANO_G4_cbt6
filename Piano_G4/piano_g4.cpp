@@ -227,6 +227,9 @@ void resetData() {
     // if (!dequeOn.empty()) dequeOn.clear(); // TODO нельзя это очищать из прерывания!!!
     for (uint8_t i = 0; i < 7; ++i) {
         f[i] = 0;
+        comp_ext_disable(i);
+        comp_set_data(i, comp[i][0]);
+        comp_ext_enable(i);
     }
 }
 
@@ -264,8 +267,17 @@ void communication() {
     if (rx_settings[0] == command::all_calib) {
         all_calibration();
     }
+
+    if (rx_settings[0] == command::reset_to_bootloader) {
+        LL_mDelay(20);
+        NVIC_SystemReset();
+    }
+
+    if (rx_settings[0] == command::echo) {
+        USART2_Send(0, 0, state::piano);
+    }
+
 }
-//---------------------------------
 
 // Calibrations
 void calibration() {
@@ -311,7 +323,6 @@ void all_calibration() {
         service_commands = subcommand::exit;
     }
 }
-//---------------------------------
 
 // UART Send-Recive
 void USART2_Send(const uint8_t& compN, const uint8_t& dot, const int& value) {
@@ -347,7 +358,6 @@ void USART2_Receive() {
     LL_USART_RequestRxDataFlush(USART2);
     LL_USART_RequestEnterMuteMode(USART2);
 }
-//---------------------------------
 
 // TIM8 IRQ Handler
 void TIM8_CC_IRQ() { // это прерывание срабатывает от TIM8 по номеру контроллера
@@ -356,7 +366,6 @@ void TIM8_CC_IRQ() { // это прерывание срабатывает от 
     LL_USART_EnableDirectionTx(USART2); // отправлять только при ВЫКЛюченных остальных слэйв-трансляторах.. иначе замыкание
     LL_DMA_EnableChannel(DMA1, LL_DMA_CHANNEL_1);
 }
-//---------------------------------
 
 // UART IRQ Handler
 void USART2_IRQ() {
@@ -375,7 +384,6 @@ void USART2_IRQ() {
         GPIOB->BSRR = 0x80; //pB7 // tim interrupter
     }
 }
-//---------------------------------
 
 // (100ns)
 void pause(const uint& p) {
@@ -413,7 +421,6 @@ abcd conv32to8(const nt& x) {
     a.c = u & 0xff;
     return a;
 }
-//---------------------------------
 
 // COMPs controls
 void setCOMP_extVoltage_Up(const int& compN) {
@@ -632,7 +639,6 @@ COMP_TypeDef* comp_def(const int& i) {
         break;
     }
 }
-//---------------------------------
 
 // COMPs IQR Handlers
 void COMP1_2_3_IRQ() { // line 21, 22, 29
@@ -671,7 +677,6 @@ void COMP7_IRQ(void) { // line 33
         iffing(6);
     }
 }
-//---------------------------------
 
 void iffing(const int& a) {
     if (chipAdress > 13) { // off
@@ -698,7 +703,6 @@ void iffing(const int& a) {
         }
     }
 }
-
 
 void Read_uint32(uint32_t Address, volatile uint32_t* pData, uint32_t Size) {
 
