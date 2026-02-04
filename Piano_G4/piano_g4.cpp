@@ -55,7 +55,6 @@ void g4() {
     LL_DAC_Enable(DAC4, LL_DAC_CHANNEL_2);
     LL_DAC_Enable(DAC2, LL_DAC_CHANNEL_1);
 
-    
 
     for (int i = 0; i < 7; ++i) { // установки по-умолчанию
         if (chipAdress > 13) {
