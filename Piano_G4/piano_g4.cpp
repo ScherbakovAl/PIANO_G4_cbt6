@@ -19,6 +19,19 @@ void g4() {
     tx_settings[0] = chipAdress;
     rx_settings[0] = chipAdress;
 
+    // using JumpFuncPtr = void(*)(); // TODO реализовать этот вариант
+    // JumpFuncPtr jump_func = nullptr;
+
+    // void jump_variant1() { /* ... */ }
+    // void jump_variant2() { /* ... */ }
+    // if (external_variable < 10) {
+    //     jump_func = jump_variant1;
+    // }
+    // else {
+    //     jump_func = jump_variant2;
+    // }
+
+
     GPIOB->BSRR = 0x80; // pB7 // tim interrupter // чтобы включился счёт таймера с H7
 
     // TIM init
