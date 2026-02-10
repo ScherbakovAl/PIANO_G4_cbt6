@@ -35,17 +35,20 @@ void g4_bootloader() {
 
 
 // #define testt
-
 #ifdef testt // считываем номер чипа из памяти (или если надо записываем)
     FlashPageInfo_t info = GetPageAndBank(ADRESS_CHIP_NUMBER, 4);
     Erase(info.start_page, info.bank); // очистить номер чипа, если надо обновить номер
 #endif
+
     uint32_t ChipN_t;
     Read_uint32(ADRESS_CHIP_NUMBER, &ChipN_t, 4);
     if (ChipN_t == 0xFFFFFFFF) {
         FlashPageInfo_t info = GetPageAndBank(ADRESS_CHIP_NUMBER, 4);
         Erase(info.start_page, info.bank); // очистить номер чипа
         Flash_uint32(ADRESS_CHIP_NUMBER, &ChipN_32, 4);
+    }
+    else {
+        Read_uint32(ADRESS_CHIP_NUMBER, &ChipN_32, 4);
     }
 
     tx_s[0] = (uint8_t)ChipN_32;
