@@ -129,7 +129,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -fno-rtti -fno-exceptions -fno-threadsafe-
 
 ```cpp
 // Лучше создать правильный тип сразу:
-uint64_t ChipN_aligned = ChipN[0]; //  TODO aligned!
+uint64_t ChipN_aligned = ChipN[0];
 Flash(ADRESS_CHIP_NUMBER, &ChipN_aligned, sizeof(uint64_t));
 ```
 

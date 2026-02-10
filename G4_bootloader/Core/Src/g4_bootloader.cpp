@@ -1,6 +1,6 @@
 #include "g4_bootloader.h"
 
-volatile uint32_t ChipN_32 = { 0x5 }; // <<<< номер чипа здесь указывается
+volatile uint32_t ChipN_32 = { 0x1 }; // <<<< номер чипа здесь указывается
 
 __attribute__((aligned(32))) volatile uint32_t bin_data_32[512] = {};
 const uint32_t bin_data_32_length = sizeof(bin_data_32); // 2 kB
@@ -62,7 +62,7 @@ void g4_bootloader() {
         }
         if (flag_for_jump == 2) {
             USART2_Send_responce(response::ok);
-            Jump_to_app(ADRESS_FOR_JUMP); // TODO по указанному адресу прыжок
+            Jump_to_app(ADRESS_FOR_JUMP);
         }
     }
 }
@@ -70,32 +70,32 @@ void g4_bootloader() {
 void communication() {
 
     USART2_Receive_settings_after_number();
-    const uint8_t rx_command = rx_s[0]; // TODO везде проверять ответ от G4
+    const uint8_t rx_command = rx_s[0];
 
-    if (rx_command == command_bootloader::echo_bootloader) { // ok
+    if (rx_command == (uint8_t)command_bootloader::echo) {
         Set_tx_s((uint8_t)ChipN_32, 0, 0, 0, (uint8_t)state::bootloader);
         USART2_Send_settings();
     }
 
-    if (rx_command == command_bootloader::reset_bootloader) { // ok
+    if (rx_command == (uint8_t)command_bootloader::reset_bootloader) {
         USART2_Send_responce(response::ok);
         Reset();
     }
 
-    if (rx_command == command_bootloader::data_from_H7_to_array_g4) { // ок
+    if (rx_command == (uint8_t)command_bootloader::data_from_H7_to_array_g4) {
         From_H7_to_array_g4();
     }
 
-    if (rx_command == command_bootloader::copy_array_to_flash_g4) { // ok
+    if (rx_command == (uint8_t)command_bootloader::copy_array_to_flash_g4) {
         Copy_array_to_flash();
     }
 
-    if (rx_command == command_bootloader::jump_to_piano_g4) { // ok
+    if (rx_command == (uint8_t)command_bootloader::jump_to_piano_g4) {
         USART2_Send_responce(response::ok);
         flag_for_jump = 1;
     }
 
-    if (rx_command == command_bootloader::jump_g4_to_adress) { // ok
+    if (rx_command == (uint8_t)command_bootloader::jump_g4_to_adress) {
         USART2_Send_responce(response::ok);
         jump_to_adress();
     }
@@ -146,7 +146,7 @@ void Copy_array_to_flash() {
     USART2_Receive_settings();
 
     int bug = 0;
-    if (rx_s[0] == response::ok) {
+    if (rx_s[0] == (uint8_t)response::ok) {
 
         FlashPageInfo_t info = GetPageAndBank(addr, bin_data_32_length);
         Erase(info.start_page, info.bank);
@@ -188,11 +188,6 @@ void Copy_array_to_flash() {
 }
 
 void Jump_to_app(const uint32_t addr) {
-    // 1. Отключаем UART и другую периферию
-    // LL_USART_RequestRxDataFlush(USART2); // TODO ? удалить это ?
-    // LL_USART_RequestEnterMuteMode(USART2);
-    // LL_USART_DisableIT_RXNE_RXFNE(USART2);
-    // LL_USART_Disable(USART2);
 
     // 2. Деинициализация HAL (сбрасывает SysTick и другие настройки)
     HAL_DeInit();
@@ -246,7 +241,7 @@ void jump_to_adress() {
 
     // если ок, то прыгаем
     USART2_Receive_settings();
-    if (rx_s[0] == response::ok) {
+    if (rx_s[0] == (uint8_t)response::ok) {
         ADRESS_FOR_JUMP = bytes_to_uint32_pointer(tx_s);
         flag_for_jump = 2;
     }
@@ -255,7 +250,6 @@ void jump_to_adress() {
 void USART2_IRQ() {
     if (LL_USART_IsActiveFlag_RXNE_RXFNE(USART2)) { // здесь прерывание, если адрес UART совпал
         communication();
-        // LL_USART_RequestRxDataFlush(USART2);   // сбрасывает RXNE флаг // TODO и без этого всё работает?
         LL_USART_RequestEnterMuteMode(USART2); // ставит USART в MuteMode и сбрасывает флаг RWU.
     }
 }
@@ -291,11 +285,11 @@ void USART2_Send_settings() {
 
 void USART2_Send_responce(response r) {
     LL_USART_EnableDirectionTx(USART2); // отправлять только при ВЫКЛюченных остальных слэйв-трансляторах.. иначе замыкание
-    tx_s[0] = (uint8_t)ChipN_32;  // TODO void send adress and 0
-    tx_s[1] = r;
-    tx_s[2] = r;
-    tx_s[3] = r;
-    tx_s[4] = r;
+    tx_s[0] = (uint8_t)ChipN_32;
+    tx_s[1] = (uint8_t)r;
+    tx_s[2] = (uint8_t)r;
+    tx_s[3] = (uint8_t)r;
+    tx_s[4] = (uint8_t)r;
     while (!LL_USART_IsActiveFlag_TXE(USART2)) {}
     for (int i = 0; i < tx_settings_length; i++) {
         LL_USART_TransmitData9(USART2, tx_s[i]);
@@ -314,18 +308,15 @@ void USART2_Receive_settings_after_number() {
         rx_s[i] = LL_USART_ReceiveData9(USART2);
     }
     LL_USART_RequestRxDataFlush(USART2);
-    // LL_USART_RequestEnterMuteMode(USART2); // TODO удалить?
 }
 
 void USART2_Receive_settings() {
     while (!LL_USART_IsActiveFlag_RXNE(USART2)) {}
-    // rx_s[0] = LL_USART_ReceiveData9(USART2);// TODO удалить?
     for (int i = 0; i < rx_settings_length; i++) {
         while (!LL_USART_IsActiveFlag_RXNE(USART2)) {}
         rx_s[i] = LL_USART_ReceiveData9(USART2);
     }
     LL_USART_RequestRxDataFlush(USART2);
-    // LL_USART_RequestEnterMuteMode(USART2);// TODO удалить?
 }
 
 
@@ -370,14 +361,14 @@ void Erase(uint32_t Page, uint32_t Banks) {
 void Flash_uint32(uint32_t Address, volatile uint32_t* Data, uint32_t size) {
     // Проверка выравнивания адреса по 8 байт для DOUBLEWORD
     if (Address % 8 != 0) {
-        Set_tx_s(response::fail, 0x11, 0x11, 0x11, 0x11);
+        Set_tx_s((uint8_t)response::fail, 0x11, 0x11, 0x11, 0x11);
         USART2_Send_settings();
         return;
     }
 
     // Проверяем корректность параметров
     if (size == 0 || Data == NULL) {
-        Set_tx_s(response::fail, 0x22, 0x22, 0x22, 0x22);
+        Set_tx_s((uint8_t)response::fail, 0x22, 0x22, 0x22, 0x22);
         USART2_Send_settings();
         return;
     }
@@ -581,204 +572,3 @@ FlashPageInfo_t GetPageAndBank(uint32_t Address, uint32_t Size) {
 
     return info;
 }
-
-
-
-// пометочки..
-/*
-// .......................................................
-    // BANK_1 -  0 to page 31
-    // Erase(20, FLASH_BANK_1);
-    // Erase(21, FLASH_BANK_1);
-    // Erase(22, FLASH_BANK_1);
-    // Erase(23, FLASH_BANK_1);
-
-    // ВАЖНО: Адрес для DOUBLEWORD должен быть выровнен по 8 байт!
-    // uint32_t addressIN = 0x08000000; // 0x08009FF0 - смотреть с этого // с адреса 0x0804 0000 - bank2
-    // uint32_t addressOUT = 0x0800A000;
-    // uint64_t data = 0xFAFBECEDABAC8888;
-
-    // uint64_t data[4] = {
-    //     0x1122334455667788,  // В памяти: 0x88 0x77 0x66 0x55 0x44 0x33 0x22 0x11
-    //     0x8877665544332211,  // В памяти: 0x11 0x22 0x33 0x44 0x55 0x66 0x77 0x88
-    //     0xAABBCCDDFEFE0011,  // В памяти: 0x11 0x00 0xFF 0xEE 0xDD 0xCC 0xBB 0xAA
-    //     0x11FFEEDDCCBBAA00   // В памяти: 0x00 0xAA 0xBB 0xCC 0xDD 0xEE 0xFF 0x11
-    // };
-
-    // uint32_t data[4] = {
-    // 0x12345678,  // В памяти: 0x88 0x77 0x66 0x55 0x44 0x33 0x22 0x11
-    // 0x87654321,  // В памяти: 0x11 0x22 0x33 0x44 0x55 0x66 0x77 0x88
-    // 0xABCDEF11,  // В памяти: 0x11 0x00 0xFF 0xEE 0xDD 0xCC 0xBB 0xAA
-    // 0x22FEDCBA   // В памяти: 0x00 0xAA 0xBB 0xCC 0xDD 0xEE 0xFF 0x11
-    // };
-
-    // uint16_t data[4] = {
-    // 0x1234,  // В памяти: 0x88 0x77 0x66 0x55 0x44 0x33 0x22 0x11
-    // 0x8765,  // В памяти: 0x11 0x22 0x33 0x44 0x55 0x66 0x77 0x88
-    // 0xABCD,  // В памяти: 0x11 0x00 0xFF 0xEE 0xDD 0xCC 0xBB 0xAA
-    // 0x22FE   // В памяти: 0x00 0xAA 0xBB 0xCC 0xDD 0xEE 0xFF 0x11
-    // };
-
-    // uint8_t data[4] = {
-    // 0x12,  // В памяти: 0x88 0x77 0x66 0x55 0x44 0x33 0x22 0x11
-    // 0x34,  // В памяти: 0x11 0x22 0x33 0x44 0x55 0x66 0x77 0x88
-    // 0x56,  // В памяти: 0x11 0x00 0xFF 0xEE 0xDD 0xCC 0xBB 0xAA
-    // 0x78   // В памяти: 0x00 0xAA 0xBB 0xCC 0xDD 0xEE 0xFF 0x11
-    // };
-
-    // Записываем весь массив за один вызов
-    // size = количество элементов * размер элемента = 4 * 8 = 32 байта
-    // Flash(addressOUT, addressIN, 0x12A8);
-// .......................................................
-
-
-
-// пометочки 2..
-// .......................................................
-// Адрес должен быть кратен 32 байтам (256 бит)
-// __ALIGNED(32) uint32_t data[8]; // Для FLASHWORD
-
-// После записи проверьте данные:
-// if (*(__IO uint32_t*)address != data[0]) {
-    // Ошибка записи
-// }
-
-// Функция чтения
-// void ReadFromFlash(uint64_t* buffer, uint32_t size) {
-//     uint64_t* addr = (uint64_t*)FLASH_USER_START_ADDR;
-//     for (uint32_t i = 0; i < size; i++) {
-//         buffer[i] = addr[i];
-//     }
-// }
-
-// void ReadIf() {
-      // if ((*(volatile uint32_t*)(Flash_Address + 0x640)) != key_to_change_memory) {
-      // 	SaveToMemory();
-      // }
-      // else {
-      // for (int i = 0; i < sizeCHART_BUFFER; ++i) {
-      // 	compsCHART_0[i] = *(volatile uint32_t*)(Flash_Address + (i * sizeof(uint32_t)));
-      // 	compsCHART_1[i] = *(volatile uint32_t*)(Flash_Address + (i * sizeof(uint32_t)) + 0x320);
-      // }
-// }
-
-// прыжок как пример:
-// #define APP_START_ADDR 0x08010000
-
-// typedef void (*pFunction)(void);
-// pFunction JumpToApplication;
-
-// void JumpToUserApp(void) {
-//     uint32_t jump_address = *(__IO uint32_t*)(APP_START_ADDR + 4);
-
-//     // Проверка стека (указатель должен быть в пределах RAM)
-//     if ((*(__IO uint32_t*)APP_START_ADDR & 0x2FFE0000) == 0x20000000) {
-//         // Деинициализация периферии
-//         HAL_RCC_DeInit();
-//         HAL_DeInit();
-
-//         // Отключение прерываний
-//         __disable_irq();
-
-//         // Установка нового вектора прерываний
-//         SCB->VTOR = APP_START_ADDR;
-
-//         // Установка указателя стека
-//         __set_MSP(*(__IO uint32_t*)APP_START_ADDR);
-
-//         // Получение адреса Reset_Handler
-//         JumpToApplication = (pFunction)jump_address;
-
-//         // Переход в приложение
-//         JumpToApplication();
-//     }
-// }
-// .......................................................
-
-*/
-
-// ============================================================================
-// ПРИМЕРЫ ИСПОЛЬЗОВАНИЯ НОВЫХ ФУНКЦИЙ Flash_uint32 И Read_uint32
-// ============================================================================
-
-// // ПРИМЕР 1: Конвертация bin_data (uint8_t) в bin_data_32 (uint32_t) и запись
-// void Example_Convert_And_Write() {
-//     // Шаг 1: Конвертируем uint8_t массив в uint32_t
-//     // bin_data[2048] -> bin_data_32[512]
-//     for (uint32_t i = 0; i < bin_data_length / 4; i++) {
-//         // Вариант через побитовые операции (универсальный)
-//         // bin_data_32[i] = bytes_to_uint32_shift(&bin_data[i * 4]);
-
-//         // Или вариант через прямое приведение (если bin_data выровнен по 4)
-//         // bin_data_32[i] = *((uint32_t*)(&bin_data[i * 4]));
-//     }
-
-//     // Шаг 2: Записываем в flash
-//     const uint32_t addr = 0x08008000;
-//     FlashPageInfo_t info = GetPageAndBank(addr, bin_data_32_length);
-//     Erase(info.start_page, info.bank);
-
-//     __DSB();  // Гарантируем завершение стирания
-//     __ISB();
-
-//     Flash_uint32(addr, bin_data_32, bin_data_32_length);
-// }
-
-// // ПРИМЕР 2: Чтение из flash в uint32_t массив и конвертация обратно в uint8_t
-// void Example_Read_And_Convert() {
-//     const uint32_t addr = 0x08008000;
-
-//     // Шаг 1: Читаем из flash в uint32_t массив
-//     Read_uint32(addr, bin_data_32, bin_data_32_length);
-
-//     // Шаг 2: Конвертируем uint32_t обратно в uint8_t
-//     for (uint32_t i = 0; i < bin_data_32_length / 4; i++) {
-//         // Вариант через побитовые операции
-//         // uint32_to_bytes_shift(bin_data_32[i], &bin_data[i * 4]);
-
-//         // Или прямое приведение (если bin_data выровнен)
-//         // *((uint32_t*)(&bin_data[i * 4])) = bin_data_32[i];
-//     }
-// }
-
-// // ПРИМЕР 3: Использование из прерывания (безопасно!)
-// void USART2_IRQ_Example() {
-//     // Эти функции безопасны для вызова из прерывания
-//     // т.к. используют критические секции внутри
-
-//     // Чтение
-//     Read_uint32(0x08008000, bin_data_32, 2048);
-
-//     // Запись (но убедитесь что страница предварительно стерта!)
-//     // Flash_uint32(0x08008000, bin_data_32, 2048);
-// }
-
-// // ПРИМЕР 4: Прямая работа без конвертации (только uint32_t)
-// void Example_Direct_uint32_Work() {
-//     // Заполняем данными напрямую
-//     for (uint32_t i = 0; i < 512; i++) {
-//         bin_data_32[i] = 0x12345678 + i;
-//     }
-
-//     // Записываем
-//     const uint32_t addr = 0x08008000;
-//     FlashPageInfo_t info = GetPageAndBank(addr, 2048);
-//     Erase(info.start_page, info.bank);
-//     __DSB();
-//     __ISB();
-//     Flash_uint32(addr, bin_data_32, 2048);
-
-//     // Проверяем чтением
-//     __attribute__((aligned(32))) volatile uint32_t verify_data[512] = {};
-//     Read_uint32(addr, verify_data, 2048);
-
-//     // Сравниваем
-//     for (uint32_t i = 0; i < 512; i++) {
-//         if (bin_data_32[i] != verify_data[i]) {
-//             // Ошибка!
-//             break;
-//         }
-//     }
-// }
-
-// ============================================================================
