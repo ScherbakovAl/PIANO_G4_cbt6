@@ -8,6 +8,7 @@
 #include "piano_g4.hpp"
 
 #include "deque"
+
 std::deque<nt> dequeOn;
 
 static const uint32_t ADRESS_CHIP_NUMBER = 0x08003800; // здесь храним номер чипа
@@ -231,7 +232,7 @@ void service() {
                 comp_ext_enable(i);
             }
             service_flag = 0;
-            USART2_Send(compN_, 0, subcommand::stop_calibration);
+            USART2_Send(compN_, 0, (int)subcommand::stop_calibration);
         }
     }
 }
@@ -255,39 +256,48 @@ void comp_refresh(uint8_t& n) {
 void communication() {
     USART2_Receive();
 
-    if (rx_settings[0] == command::sync_timer) {
+    if (rx_settings[0] == (uint8_t)command::sync_timer) {
         TIM8->CNT = 0;  // PWM - tim clk
-        USART2_Send(compN_, dot_, 0);
         resetData();
+        USART2_Send(compN_, dot_, 0);
     }
 
-    if (rx_settings[0] == command::cal) {
+    if (rx_settings[0] == (uint8_t)command::cal) {
         calibration();
         resetData();
     }
 
-    if (rx_settings[0] == command::read_comp_value) {
+    if (rx_settings[0] == (uint8_t)command::read_comp_value) {
         USART2_Send(compN_, dot_, comp[compN_][dot_]);
     }
 
-    if (rx_settings[0] == command::set_comp_value) {
+    if (rx_settings[0] == (uint8_t)command::set_comp_value) {
         comp[compN_][dot_] = convert8x2to16(a_, b_);
         USART2_Send(compN_, dot_, comp[compN_][dot_]);
-        comp_refresh(compN_);
         f[compN_] = 0;
     }
 
-    if (rx_settings[0] == command::all_calib) {
+    if (rx_settings[0] == (uint8_t)command::all_calib) {
         all_calibration();
     }
 
-    if (rx_settings[0] == command::reset_to_bootloader) {
+    if (rx_settings[0] == (uint8_t)command::reset_to_bootloader) {
         LL_mDelay(20);
         NVIC_SystemReset();
     }
 
-    if (rx_settings[0] == command::echo) {
-        USART2_Send(0, 0, state::piano);
+    if (rx_settings[0] == (uint8_t)command::echo) {
+        USART2_Send(0, 0, (int)chip_states::piano);
+    }
+
+    if (rx_settings[0] == (uint8_t)command::mute) { // TODO mute<->unmute
+        mute();
+        USART2_Send(0, 0, (int)chip_states::piano);
+    }
+
+    if (rx_settings[0] == (uint8_t)command::unmute) { // TODO mute<->unmute
+        unmute();
+        USART2_Send(0, 0, (int)chip_states::piano);
     }
 
 }
@@ -314,26 +324,40 @@ void calibration() {
 }
 
 void all_calibration() {
-    if (b_ == subcommand::start_calibration) {
+    if (b_ == (uint8_t)subcommand::start_calibration) {
         for (int i = 0; i < 7; ++i) {
             f[i] = 0;
             comp_ext_disable(i);
         }
         service_commands = subcommand::working;
         service_flag = 1;
-        USART2_Send(compN_, 0, subcommand::start_calibration);
+        USART2_Send(compN_, 0, (int)subcommand::start_calibration);
     }
-    else if (b_ == subcommand::read_calibration) {
+    else if (b_ == (uint8_t)subcommand::read_calibration) {
         pause(4);
-        USART2_Send(compN_, 0, subcommand::read_calibration);
+        USART2_Send(compN_, 0, (int)subcommand::read_calibration);
         for (int i = 0; i < 7; ++i) {
             pause(6);
             USART2_Send(i, 0, comp_calibration[i]);
+            pause(4);
+            USART2_Send(i, 0, comp_read_data(i)); // TODO отправить текущее значение цап
         }
         flag_Service_command = 1;
     }
-    else if (b_ == subcommand::stop_calibration) {
+    else if (b_ == (uint8_t)subcommand::stop_calibration) {
         service_commands = subcommand::exit;
+    }
+}
+
+void mute() {
+    for (int a = 0; a < 7; ++a) {
+        comp_ext_disable(a);
+    }
+}
+
+void unmute() {
+    for (int a = 0; a < 7; ++a) {
+        comp_ext_enable(a);
     }
 }
 
@@ -625,6 +649,34 @@ void comp_set_data(const int& compN, const int& data) {
         LL_DAC_ConvertData12RightAligned(DAC2, LL_DAC_CHANNEL_1, data);
         break;
     }
+}
+
+uint32_t comp_read_data(const int& compN) {
+    uint32_t data = 0;
+    switch (compN) {
+    case 0:
+        data = LL_DAC_RetrieveOutputData(DAC1, LL_DAC_CHANNEL_1);
+        break;
+    case 1:
+        data = LL_DAC_RetrieveOutputData(DAC1, LL_DAC_CHANNEL_2);
+        break;
+    case 2:
+        data = LL_DAC_RetrieveOutputData(DAC3, LL_DAC_CHANNEL_1);
+        break;
+    case 3:
+        data = LL_DAC_RetrieveOutputData(DAC3, LL_DAC_CHANNEL_2);
+        break;
+    case 4:
+        data = LL_DAC_RetrieveOutputData(DAC4, LL_DAC_CHANNEL_1);
+        break;
+    case 5:
+        data = LL_DAC_RetrieveOutputData(DAC4, LL_DAC_CHANNEL_2);
+        break;
+    case 6:
+        data = LL_DAC_RetrieveOutputData(DAC2, LL_DAC_CHANNEL_1);
+        break;
+    }
+    return data;
 }
 
 COMP_TypeDef* comp_def(const int& i) {

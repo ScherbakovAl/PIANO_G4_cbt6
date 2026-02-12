@@ -19,21 +19,6 @@ volatile int flag_for_jump = 0;
 
 void g4_bootloader() {
 
-    // UART init
-    LL_USART_DisableDirectionTx(USART2); // один или несколько MCU должны быть подтянуты к pull_UP ! // надо ли? проверить..
-    LL_USART_Disable(USART2);            // надо ли? проверить..
-    LL_USART_ConfigNodeAddress(USART2, LL_USART_ADDRESS_DETECT_7B, ChipN_32);
-    LL_USART_ClearFlag_TC(USART2);
-    LL_USART_EnableIT_RXNE_RXFNE(USART2);  // включение прерывания по приему данных
-    LL_USART_EnableMuteMode(USART2);       // включение MuteMode
-    LL_USART_RequestEnterMuteMode(USART2); // ставит USART в MuteMode и сбрасывает флаг RWU.
-    LL_USART_Enable(USART2);
-    LL_USART_DisableDirectionTx(USART2);   // один или несколько MCU должны быть подтянуты к pull_UP !
-
-    LL_mDelay(1);
-
-
-
 // #define testt
 #ifdef testt // считываем номер чипа из памяти (или если надо записываем)
     FlashPageInfo_t info = GetPageAndBank(ADRESS_CHIP_NUMBER, 4);
@@ -50,6 +35,18 @@ void g4_bootloader() {
     else {
         Read_uint32(ADRESS_CHIP_NUMBER, &ChipN_32, 4);
     }
+
+
+    // UART init
+    LL_USART_DisableDirectionTx(USART2); // один или несколько MCU должны быть подтянуты к pull_UP ! // надо ли? проверить..
+    LL_USART_Disable(USART2);            // надо ли? проверить..
+    LL_USART_ConfigNodeAddress(USART2, LL_USART_ADDRESS_DETECT_7B, ChipN_32);
+    LL_USART_ClearFlag_TC(USART2);
+    LL_USART_EnableIT_RXNE_RXFNE(USART2);  // включение прерывания по приему данных
+    LL_USART_EnableMuteMode(USART2);       // включение MuteMode
+    LL_USART_RequestEnterMuteMode(USART2); // ставит USART в MuteMode и сбрасывает флаг RWU.
+    LL_USART_Enable(USART2);
+    LL_USART_DisableDirectionTx(USART2);   // один или несколько MCU должны быть подтянуты к pull_UP !
 
     tx_s[0] = (uint8_t)ChipN_32;
     rx_s[0] = (uint8_t)ChipN_32;
@@ -76,7 +73,7 @@ void communication() {
     const uint8_t rx_command = rx_s[0];
 
     if (rx_command == (uint8_t)command_bootloader::echo) {
-        Set_tx_s((uint8_t)ChipN_32, 0, 0, 0, (uint8_t)state::bootloader);
+        Set_tx_s((uint8_t)ChipN_32, 0, 0, 0, (uint8_t)chip_states::bootloader);
         USART2_Send_settings();
     }
 

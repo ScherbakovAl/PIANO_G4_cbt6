@@ -50,18 +50,20 @@ extern "C" {
     volatile int fl = 1;
     volatile int flag_Service_command = 1;
 
-    enum command { // 
+    enum class command {
         sync_timer = 1,
         cal,
-        read_comp_value, // TODO добавить проверки (принять ответ)
-        set_comp_value, // TODO добавить проверки (принять ответ)
+        read_comp_value,
+        set_comp_value,
         read_comp_setting, // TODO реализовать
         all_calib,
-        reset_to_bootloader, // TODO реализовать
-        echo = 11 // TODO реализовать для основной прошивки
+        reset_to_bootloader,
+        mute,
+        unmute,
+        echo = 11
     };
 
-    enum subcommand {
+    enum class subcommand {
         start_calibration = 1,
         read_calibration,
         stop_calibration,
@@ -70,9 +72,9 @@ extern "C" {
         exit
     };
 
-    enum state {
+    enum class chip_states {
         bootloader = 1,
-        piano
+        piano // main
     };
 
     struct conv16to8x2 {
@@ -91,7 +93,7 @@ extern "C" {
         uint8_t c = 0;
     };
 
-    subcommand service_commands = working;
+    subcommand service_commands = subcommand::working;
     int service_flag = 0;
 
     void check();
@@ -100,6 +102,8 @@ extern "C" {
     void communication();
     void calibration();
     void all_calibration();
+    void mute();
+    void unmute();
     void USART2_Send(const uint8_t& compN, const uint8_t& dot, const int& value);
     void USART2_Receive();
     void TIM8_CC_IRQ();
@@ -116,6 +120,7 @@ extern "C" {
     void comp_ext_enable(const int& compN);
     void comp_ext_disable(const int& compN);
     void comp_set_data(const int& compN, const int& data);
+    uint32_t comp_read_data(const int& compN);
     void COMP1_2_3_IRQ();
     void COMP4_5_6_IRQ();
     void COMP7_IRQ();

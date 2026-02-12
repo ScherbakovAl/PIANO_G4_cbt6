@@ -19,7 +19,7 @@ extern "C" {
         jump_g4_to_adress // прыжок по указанному адресу
     };
 
-    enum class state {
+    enum class chip_states {
         bootloader = 1,
         piano
     };
