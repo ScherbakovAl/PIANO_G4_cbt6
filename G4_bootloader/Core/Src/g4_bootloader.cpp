@@ -1,6 +1,6 @@
 #include "g4_bootloader.h"
 
-volatile uint32_t ChipN_32 = { 0x1 }; // <<<< номер чипа здесь указывается
+volatile uint32_t ChipN_32 = { 23 }; // <<<< номер чипа здесь указывается
 
 __attribute__((aligned(32))) volatile uint32_t bin_data_32[512] = {};
 const uint32_t bin_data_32_length = sizeof(bin_data_32); // 2 kB

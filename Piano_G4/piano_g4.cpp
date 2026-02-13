@@ -744,6 +744,7 @@ void COMP7_IRQ(void) { // line 33
 }
 
 void iffing(const int& a) {
+    // const uint32_t t = TIM2->CNT; // TODO timer
     if (chipAdress > 13) { // off
         if (f[a] == 0) {
             f[a] = 1;
