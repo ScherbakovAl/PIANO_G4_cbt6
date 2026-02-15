@@ -124,9 +124,11 @@ extern "C" {
     void COMP1_2_3_IRQ();
     void COMP4_5_6_IRQ();
     void COMP7_IRQ();
-    void iffing(const int& a);
+    // void iffing(const int& a);
     COMP_TypeDef* comp_def(const int& i);
     void Read_uint32(uint32_t Address, volatile uint32_t* pData, uint32_t Size);
+    void jump_off(const int& a);
+    void jump_on(const int& a);
 
 }
 #endif // extern "C"

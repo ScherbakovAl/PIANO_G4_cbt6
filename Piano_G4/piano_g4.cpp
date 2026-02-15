@@ -13,6 +13,9 @@ std::deque<nt> dequeOn;
 
 static const uint32_t ADRESS_CHIP_NUMBER = 0x08003800; // здесь храним номер чипа
 
+using JumpFuncPtr = void(*)(const int& a); // подмена функции jump_func на jump_on или jump_off
+JumpFuncPtr jump_func = nullptr;
+
 // main
 void g4() {
     Read_uint32(ADRESS_CHIP_NUMBER, &chipAdress, 4);
@@ -20,17 +23,13 @@ void g4() {
     tx_settings[0] = chipAdress;
     rx_settings[0] = chipAdress;
 
-    // using JumpFuncPtr = void(*)(); // TODO реализовать этот вариант
-    // JumpFuncPtr jump_func = nullptr;
 
-    // void jump_variant1() { /* ... */ }
-    // void jump_variant2() { /* ... */ }
-    // if (external_variable < 10) {
-    //     jump_func = jump_variant1;
-    // }
-    // else {
-    //     jump_func = jump_variant2;
-    // }
+    if (chipAdress > 13) { // выбор функции для прыжка для on или off
+        jump_func = jump_off;
+    }
+    else {
+        jump_func = jump_on;
+    }
 
 
     GPIOB->BSRR = 0x80; // pB7 // tim interrupter // чтобы включился счёт таймера с H7
@@ -709,64 +708,65 @@ COMP_TypeDef* comp_def(const int& i) {
 void COMP1_2_3_IRQ() { // line 21, 22, 29
     if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_21)) {
         comp_ext_disable(0);
-        iffing(0);
+        jump_func(0);
     }
     if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_22)) {
         comp_ext_disable(1);
-        iffing(1);
+        jump_func(1);
     }
     if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_29)) {
         comp_ext_disable(2);
-        iffing(2);
+        jump_func(2);
     }
 }
 
 void COMP4_5_6_IRQ(void) { // line 30, 31, 32
     if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_30)) {
         comp_ext_disable(3);
-        iffing(3);
+        jump_func(3);
     }
     if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_31)) {
         comp_ext_disable(4);
-        iffing(4);
+        jump_func(4);
     }
     if (LL_EXTI_IsActiveFlag_32_63(LL_EXTI_LINE_32)) {
         comp_ext_disable(5);
-        iffing(5);
+        jump_func(5);
     }
 }
 
 void COMP7_IRQ(void) { // line 33
     if (LL_EXTI_IsActiveFlag_32_63(LL_EXTI_LINE_33)) {
         comp_ext_disable(6);
-        iffing(6);
+        jump_func(6);
     }
 }
 
-void iffing(const int& a) {
-    // const uint32_t t = TIM2->CNT; // TODO timer
-    if (chipAdress > 13) { // off
-        if (f[a] == 0) {
-            f[a] = 1;
-        }
-        if (f[a] == 2) {
-            f[a] = 3;
-            tim[a][0] = TIM2->CNT;
-        }
-        if (f[a] == 4) {
-            f[a] = 5;
-            tim[a][1] = TIM2->CNT;
-        }
+void jump_off(const int& a) {
+    const uint32_t t = TIM2->CNT;
+    if (f[a] == 0) {
+        f[a] = 1;
     }
-    else { // on
-        if (f[a] == 0) {
-            f[a] = 1;
-            tim[a][0] = TIM2->CNT;
-        }
-        if (f[a] == 2) {
-            f[a] = 3;
-            tim[a][1] = TIM2->CNT;
-        }
+    if (f[a] == 2) {
+        f[a] = 3;
+        tim[a][0] = t;
+    }
+    if (f[a] == 4) {
+        f[a] = 5;
+        tim[a][1] = t;
+    }
+
+}
+
+void jump_on(const int& a) {
+    const uint32_t t = TIM2->CNT;
+    if (f[a] == 0) {
+        f[a] = 1;
+        tim[a][0] = t;
+    }
+    if (f[a] == 2) {
+        f[a] = 3;
+        tim[a][1] = t;
     }
 }
 
