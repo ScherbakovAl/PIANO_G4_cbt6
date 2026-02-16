@@ -591,10 +591,41 @@ void comp_ext_enable(const int& compN) {
     }
 }
 
+
+struct exti_prN {
+    __IO uint32_t* prX = nullptr;
+    __IO uint32_t* imrX = nullptr;
+    __IO uint32_t line = 0;
+};
+exti_prN ext_pr_clear_flag[7];
+void ext_pr_init() {
+    for (int i = 0; i < 7; ++i) {
+        switch (i) {
+        case 0:
+            ext_pr_clear_flag[i].prX = &EXTI->PR1;
+            ext_pr_clear_flag[i].imrX = &EXTI->IMR1;
+            ext_pr_clear_flag[i].line = LL_EXTI_LINE_21;
+            break;
+        case 1:
+            // ext_pr[i].pr = &EXTI->PR1;
+            // ext_pr[i].line = LL_EXTI_LINE_21;
+            break;
+
+        default:
+            break;
+        }
+    }
+}
+
 void comp_ext_disable(const int& compN) {
+    // WRITE_REG(ext_pr_clear_flag[compN].prX, ext_pr_clear_flag[compN].line); // TODO LL_EXTI_ClearFlag_X_XX(LL_EXTI_LINE_XX)LL_EXTI_LINE_21
+    // CLEAR_BIT(ext_pr_clear_flag[compN].imrX, ext_pr_clear_flag[compN].line);
     switch (compN) {
     case 0:
+        // WRITE_REG(EXTI->PR1, LL_EXTI_LINE_21); // TODO
         LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_21);
+
+        // CLEAR_BIT(EXTI->IMR1, LL_EXTI_LINE_21);
         LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_21);
         break;
     case 1:
@@ -706,6 +737,7 @@ COMP_TypeDef* comp_def(const int& i) {
 
 // COMPs IQR Handlers
 void COMP1_2_3_IRQ() { // line 21, 22, 29
+    // if (READ_BIT(EXTI->PR1, LL_EXTI_LINE_21) == LL_EXTI_LINE_21){} // TODO заменить на это
     if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_21)) {
         comp_ext_disable(0);
         jump_func(0);
@@ -755,7 +787,6 @@ void jump_off(const int& a) {
         f[a] = 5;
         tim[a][1] = t;
     }
-
 }
 
 void jump_on(const int& a) {
