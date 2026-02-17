@@ -44,8 +44,15 @@ extern "C" {
     int comp[7][3] = { };
     int comp_calibration[7] = { };
     int cc_fl[7] = { }; // флаг. Проверять состояние данного компаратора при калибровке или нет
-    int def_on[2] = { 2800, 1200 }; // TODO для noteOFF сдесь сделать правильные значения для запуска
-    int def_off[3] = { 2300, 2600, 2000 }; // [0]-1я точка, затем 2я. [2] - точка переключения направления срабатывания компаратора
+    int def_on[2] = { 2200, 2000 };
+    int def_off[3] = { 1800, 3400, 1600 }; // [0]-1я точка, затем 2я. [2] - точка переключения направления срабатывания компаратора
+    struct default_comp { // TODO
+        int green_on = 2200;
+        int red_on = 2000;
+        int green_off = 1800;
+        int red_off = 3400;
+        int grey_off = 1600;
+    };
     volatile int8_t f[7] = { 0 };
     volatile int fl = 1;
     volatile int flag_Service_command = 1;

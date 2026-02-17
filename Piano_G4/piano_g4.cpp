@@ -339,7 +339,7 @@ void all_calibration() {
             pause(6);
             USART2_Send(i, 0, comp_calibration[i]);
             pause(4);
-            USART2_Send(i, 0, comp_read_data(i)); // TODO отправить текущее значение цап
+            USART2_Send(i, 0, comp_read_data(i)); // TODO отправить текущее значение цап, но не здесь - в другм месте и по запросу
         }
         flag_Service_command = 1;
     }
@@ -592,12 +592,15 @@ void comp_ext_enable(const int& compN) {
 }
 
 
+#include "stm32g4xx.h"
 struct exti_prN {
     __IO uint32_t* prX = nullptr;
     __IO uint32_t* imrX = nullptr;
     __IO uint32_t line = 0;
 };
+
 exti_prN ext_pr_clear_flag[7];
+
 void ext_pr_init() {
     for (int i = 0; i < 7; ++i) {
         switch (i) {
@@ -616,10 +619,9 @@ void ext_pr_init() {
         }
     }
 }
-
 void comp_ext_disable(const int& compN) {
-    // WRITE_REG(ext_pr_clear_flag[compN].prX, ext_pr_clear_flag[compN].line); // TODO LL_EXTI_ClearFlag_X_XX(LL_EXTI_LINE_XX)LL_EXTI_LINE_21
-    // CLEAR_BIT(ext_pr_clear_flag[compN].imrX, ext_pr_clear_flag[compN].line);
+    WRITE_REG(ext_pr_clear_flag[compN].prX, &ext_pr_clear_flag[compN].line); // TODO LL_EXTI_ClearFlag_X_XX(LL_EXTI_LINE_XX)LL_EXTI_LINE_21
+    CLEAR_BIT(ext_pr_clear_flag[compN].imrX, &ext_pr_clear_flag[compN].line);
     switch (compN) {
     case 0:
         // WRITE_REG(EXTI->PR1, LL_EXTI_LINE_21); // TODO
