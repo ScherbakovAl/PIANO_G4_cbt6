@@ -44,15 +44,16 @@ extern "C" {
     int comp[7][3] = { };
     int comp_calibration[7] = { };
     int cc_fl[7] = { }; // флаг. Проверять состояние данного компаратора при калибровке или нет
-    int def_on[2] = { 2200, 2000 };
-    int def_off[3] = { 1800, 3400, 1600 }; // [0]-1я точка, затем 2я. [2] - точка переключения направления срабатывания компаратора
-    struct default_comp { // TODO
+
+    struct default_comp {
         int green_on = 2200;
         int red_on = 2000;
         int green_off = 1800;
         int red_off = 3400;
         int grey_off = 1600;
     };
+    struct default_comp def_comp;
+
     volatile int8_t f[7] = { 0 };
     volatile int fl = 1;
     volatile int flag_Service_command = 1;
@@ -62,7 +63,7 @@ extern "C" {
         cal,
         read_comp_value,
         set_comp_value,
-        read_comp_setting, // TODO реализовать
+        read_comp_setting,
         all_calib,
         reset_to_bootloader,
         mute,
@@ -90,15 +91,22 @@ extern "C" {
     };
 
     struct nt {
-        uint8_t n = 0;
+        uint8_t note = 0;
         uint32_t timelegth = 0;
     };
 
-    struct abcd {
-        uint8_t a = 0;
-        uint8_t b = 0;
-        uint8_t c = 0;
+    struct exti_prN {
+        __IO uint32_t line = 0;
+        __IO uint32_t* prX = nullptr;
+        __IO uint32_t* imrX = nullptr;
+        __IO uint32_t* emrX = nullptr;
+        __IO uint32_t* ftsrX = nullptr;
+        __IO uint32_t* rtsrX = nullptr;
+        __IO uint32_t* pregSet = nullptr;
+        __IO uint32_t* pregRead = nullptr;
     };
+
+    exti_prN reg_flags[7];
 
     subcommand service_commands = subcommand::working;
     int service_flag = 0;
@@ -119,7 +127,6 @@ extern "C" {
     void pause(const uint& p);
     int convert8x2to16(const uint8_t& a, const uint8_t& b);
     conv16to8x2 convert16to8x2(const int& a);
-    abcd conv32to8(const nt& x);
     void setCOMP_extVoltage_Up(const int& compN);
     void setCOMP_extVoltage_Down(const int& compN);
     void set_ALL_COMP_extVoltage_Up();
@@ -131,11 +138,11 @@ extern "C" {
     void COMP1_2_3_IRQ();
     void COMP4_5_6_IRQ();
     void COMP7_IRQ();
-    // void iffing(const int& a);
     COMP_TypeDef* comp_def(const int& i);
     void Read_uint32(uint32_t Address, volatile uint32_t* pData, uint32_t Size);
-    void jump_off(const int& a);
-    void jump_on(const int& a);
+    void jump_off(const int& a, const uint32_t& t);
+    void jump_on(const int& a, const uint32_t& t);
+    void reg_init();
 
 }
 #endif // extern "C"

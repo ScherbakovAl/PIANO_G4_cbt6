@@ -7,5 +7,6 @@
     "telemetry.editStats.enabled": false,
     "files.associations": {
         "random": "cpp"
-    }
+    },
+    "todo-tree.tree.scanMode": "workspace only"
 }

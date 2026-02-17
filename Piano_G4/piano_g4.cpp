@@ -6,14 +6,14 @@
  */
 
 #include "piano_g4.hpp"
-
+#include "stm32g4xx.h"
 #include "deque"
 
 std::deque<nt> dequeOn;
 
 static const uint32_t ADRESS_CHIP_NUMBER = 0x08003800; // здесь храним номер чипа
 
-using JumpFuncPtr = void(*)(const int& a); // подмена функции jump_func на jump_on или jump_off
+using JumpFuncPtr = void(*)(const int& a, const uint32_t& t); // подмена функции jump_func на jump_on или jump_off
 JumpFuncPtr jump_func = nullptr;
 
 // main
@@ -31,6 +31,7 @@ void g4() {
         jump_func = jump_on;
     }
 
+    reg_init();
 
     GPIOB->BSRR = 0x80; // pB7 // tim interrupter // чтобы включился счёт таймера с H7
 
@@ -71,12 +72,13 @@ void g4() {
 
     for (int i = 0; i < 7; ++i) { // установки по-умолчанию
         if (chipAdress > 13) {
-            comp[i][0] = def_off[0];
-            comp[i][1] = def_off[1];
+            comp[i][0] = def_comp.green_off;
+            comp[i][1] = def_comp.red_off;
+            comp[i][2] = def_comp.grey_off;
         }
         else {
-            comp[i][0] = def_on[0];
-            comp[i][1] = def_on[1];
+            comp[i][0] = def_comp.green_on;
+            comp[i][1] = def_comp.red_on;
 
         }
         comp_calibration[i] = 0;
@@ -93,7 +95,7 @@ void g4() {
 
     if (chipAdress > 13) {
         // set_ALL_COMP_extVoltage_Up(); // для ship OFF
-        windowReTRigger1 = 10 * 60; // = 40ms // TIM5 (p100us) // TODO провериь бОльшие значения
+        windowReTRigger1 = 10 * 60; // = 60ms // TIM5 (p100us) // TODO провериь бОльшие значения
         windowReTRigger2 = 10 * 60; // = 60ms // TIM5 (p100us)
     }
     else { // ship ON
@@ -185,12 +187,12 @@ void g4() {
 
 void check() {
     if (!dequeOn.empty() && fl) {
-        nt x = dequeOn.front();
-        abcd a{ conv32to8(x) };
-        tx_data[0] = x.n; // TODO add "& 0xFF" ?
-        tx_data[1] = a.a;
-        tx_data[2] = a.b;
-        tx_data[3] = a.c;
+        const nt& x = dequeOn.front();
+        uint32_t u = x.timelegth;
+        tx_data[0] = x.note;
+        tx_data[1] = (u & 0xff << 16) >> 16;
+        tx_data[2] = (u & 0xff << 8) >> 8;
+        tx_data[3] = u & 0xff;
         LL_DMA_DisableChannel(DMA1, LL_DMA_CHANNEL_1);
         LL_DMA_SetDataLength(DMA1, LL_DMA_CHANNEL_1, tx_dataLength);
         LL_USART_ClearFlag_TC(USART2);
@@ -276,6 +278,11 @@ void communication() {
         f[compN_] = 0;
     }
 
+    if (rx_settings[0] == (uint8_t)command::read_comp_setting) {
+        pause(4);
+        USART2_Send(compN_, dot_, comp_read_data(compN_));
+    }
+
     if (rx_settings[0] == (uint8_t)command::all_calib) {
         all_calibration();
     }
@@ -285,20 +292,19 @@ void communication() {
         NVIC_SystemReset();
     }
 
-    if (rx_settings[0] == (uint8_t)command::echo) {
-        USART2_Send(0, 0, (int)chip_states::piano);
-    }
-
-    if (rx_settings[0] == (uint8_t)command::mute) { // TODO mute<->unmute
+    if (rx_settings[0] == (uint8_t)command::mute) {
         mute();
         USART2_Send(0, 0, (int)chip_states::piano);
     }
 
-    if (rx_settings[0] == (uint8_t)command::unmute) { // TODO mute<->unmute
+    if (rx_settings[0] == (uint8_t)command::unmute) {
         unmute();
         USART2_Send(0, 0, (int)chip_states::piano);
     }
 
+    if (rx_settings[0] == (uint8_t)command::echo) {
+        USART2_Send(0, 0, (int)chip_states::piano);
+    }
 }
 
 // Calibrations
@@ -338,8 +344,6 @@ void all_calibration() {
         for (int i = 0; i < 7; ++i) {
             pause(6);
             USART2_Send(i, 0, comp_calibration[i]);
-            pause(4);
-            USART2_Send(i, 0, comp_read_data(i)); // TODO отправить текущее значение цап, но не здесь - в другм месте и по запросу
         }
         flag_Service_command = 1;
     }
@@ -449,108 +453,21 @@ conv16to8x2 convert16to8x2(const int& a) { // TODO AI - Проблема: Неп
     return r;
 }
 
-abcd conv32to8(const nt& x) {
-    abcd a;
-    uint32_t u = x.timelegth;
-    a.a = (u & 0xff << 16) >> 16;
-    a.b = (u & 0xff << 8) >> 8;
-    a.c = u & 0xff;
-    return a;
-}
-
 // COMPs controls
 void setCOMP_extVoltage_Up(const int& compN) {
-    switch (compN) {
-    case 0:
-        LL_EXTI_DisableFallingTrig_0_31(LL_EXTI_LINE_21);
-        LL_EXTI_EnableRisingTrig_0_31(LL_EXTI_LINE_21);
-        LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_21);
-        LL_EXTI_DisableEvent_0_31(LL_EXTI_LINE_21);
-        break;
-    case 1:
-        LL_EXTI_DisableFallingTrig_0_31(LL_EXTI_LINE_22);
-        LL_EXTI_EnableRisingTrig_0_31(LL_EXTI_LINE_22);
-        LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_22);
-        LL_EXTI_DisableEvent_0_31(LL_EXTI_LINE_22);
-        break;
-    case 2:
-        LL_EXTI_DisableFallingTrig_0_31(LL_EXTI_LINE_29);
-        LL_EXTI_EnableRisingTrig_0_31(LL_EXTI_LINE_29);
-        LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_29);
-        LL_EXTI_DisableEvent_0_31(LL_EXTI_LINE_29);
-        break;
-    case 3:
-        LL_EXTI_DisableFallingTrig_0_31(LL_EXTI_LINE_30);
-        LL_EXTI_EnableRisingTrig_0_31(LL_EXTI_LINE_30);
-        LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_30);
-        LL_EXTI_DisableEvent_0_31(LL_EXTI_LINE_30);
-        break;
-    case 4:
-        LL_EXTI_DisableFallingTrig_0_31(LL_EXTI_LINE_31);
-        LL_EXTI_EnableRisingTrig_0_31(LL_EXTI_LINE_31);
-        LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_31);
-        LL_EXTI_DisableEvent_0_31(LL_EXTI_LINE_31);
-        break;
-    case 5:
-        LL_EXTI_DisableFallingTrig_32_63(LL_EXTI_LINE_32);
-        LL_EXTI_EnableRisingTrig_32_63(LL_EXTI_LINE_32);
-        LL_EXTI_ClearFlag_32_63(LL_EXTI_LINE_32);
-        LL_EXTI_DisableEvent_32_63(LL_EXTI_LINE_32);
-        break;
-    case 6:
-        LL_EXTI_DisableFallingTrig_32_63(LL_EXTI_LINE_33);
-        LL_EXTI_EnableRisingTrig_32_63(LL_EXTI_LINE_33);
-        LL_EXTI_ClearFlag_32_63(LL_EXTI_LINE_33);
-        LL_EXTI_DisableEvent_32_63(LL_EXTI_LINE_33);
-        break;
-    }
+    const exti_prN& tmp = reg_flags[compN];
+    CLEAR_BIT(*tmp.ftsrX, tmp.line); // LL_EXTI_DisableFallingTrig_0_31(LL_EXTI_LINE_21);
+    SET_BIT(*tmp.rtsrX, tmp.line); // LL_EXTI_EnableRisingTrig_0_31(LL_EXTI_LINE_21);
+    WRITE_REG(*tmp.prX, tmp.line); // LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_21);
+    CLEAR_BIT(*tmp.emrX, tmp.line); // LL_EXTI_DisableEvent_0_31(LL_EXTI_LINE_21);
 }
 
 void setCOMP_extVoltage_Down(const int& compN) {
-    switch (compN) {
-    case 0:
-        LL_EXTI_DisableRisingTrig_0_31(LL_EXTI_LINE_21);
-        LL_EXTI_EnableFallingTrig_0_31(LL_EXTI_LINE_21);
-        LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_21);
-        LL_EXTI_DisableEvent_0_31(LL_EXTI_LINE_21);
-        break;
-    case 1:
-        LL_EXTI_DisableRisingTrig_0_31(LL_EXTI_LINE_22);
-        LL_EXTI_EnableFallingTrig_0_31(LL_EXTI_LINE_22);
-        LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_22);
-        LL_EXTI_DisableEvent_0_31(LL_EXTI_LINE_22);
-        break;
-    case 2:
-        LL_EXTI_DisableRisingTrig_0_31(LL_EXTI_LINE_29);
-        LL_EXTI_EnableFallingTrig_0_31(LL_EXTI_LINE_29);
-        LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_29);
-        LL_EXTI_DisableEvent_0_31(LL_EXTI_LINE_29);
-        break;
-    case 3:
-        LL_EXTI_DisableRisingTrig_0_31(LL_EXTI_LINE_30);
-        LL_EXTI_EnableFallingTrig_0_31(LL_EXTI_LINE_30);
-        LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_30);
-        LL_EXTI_DisableEvent_0_31(LL_EXTI_LINE_30);
-        break;
-    case 4:
-        LL_EXTI_DisableRisingTrig_0_31(LL_EXTI_LINE_31);
-        LL_EXTI_EnableFallingTrig_0_31(LL_EXTI_LINE_31);
-        LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_31);
-        LL_EXTI_DisableEvent_0_31(LL_EXTI_LINE_31);
-        break;
-    case 5:
-        LL_EXTI_DisableRisingTrig_32_63(LL_EXTI_LINE_32);
-        LL_EXTI_EnableFallingTrig_32_63(LL_EXTI_LINE_32);
-        LL_EXTI_ClearFlag_32_63(LL_EXTI_LINE_32);
-        LL_EXTI_DisableEvent_32_63(LL_EXTI_LINE_32);
-        break;
-    case 6:
-        LL_EXTI_DisableRisingTrig_32_63(LL_EXTI_LINE_33);
-        LL_EXTI_EnableFallingTrig_32_63(LL_EXTI_LINE_33);
-        LL_EXTI_ClearFlag_32_63(LL_EXTI_LINE_33);
-        LL_EXTI_DisableEvent_32_63(LL_EXTI_LINE_33);
-        break;
-    }
+    const exti_prN& tmp = reg_flags[compN];
+    CLEAR_BIT(*tmp.rtsrX, tmp.line); // LL_EXTI_DisableRisingTrig_0_31(LL_EXTI_LINE_21);
+    SET_BIT(*tmp.ftsrX, tmp.line); // LL_EXTI_EnableFallingTrig_0_31(LL_EXTI_LINE_21);
+    WRITE_REG(*tmp.prX, tmp.line); // LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_21);
+    CLEAR_BIT(*tmp.emrX, tmp.line); // LL_EXTI_DisableEvent_0_31(LL_EXTI_LINE_21);
 }
 
 void set_ALL_COMP_extVoltage_Up() {
@@ -566,152 +483,25 @@ void set_ALL_COMP_extVoltage_Down() {
 }
 
 void comp_ext_enable(const int& compN) {
-    switch (compN) {
-    case 0:
-        LL_EXTI_EnableIT_0_31(LL_EXTI_LINE_21);
-        break;
-    case 1:
-        LL_EXTI_EnableIT_0_31(LL_EXTI_LINE_22);
-        break;
-    case 2:
-        LL_EXTI_EnableIT_0_31(LL_EXTI_LINE_29);
-        break;
-    case 3:
-        LL_EXTI_EnableIT_0_31(LL_EXTI_LINE_30);
-        break;
-    case 4:
-        LL_EXTI_EnableIT_0_31(LL_EXTI_LINE_31);
-        break;
-    case 5:
-        LL_EXTI_EnableIT_32_63(LL_EXTI_LINE_32);
-        break;
-    case 6:
-        LL_EXTI_EnableIT_32_63(LL_EXTI_LINE_33);
-        break;
-    }
+    const exti_prN& tmp = reg_flags[compN];
+    SET_BIT(*tmp.imrX, tmp.line); // LL_EXTI_EnableIT_X_XX(LL_EXTI_LINE_XX);
 }
 
-
-#include "stm32g4xx.h"
-struct exti_prN {
-    __IO uint32_t* prX = nullptr;
-    __IO uint32_t* imrX = nullptr;
-    __IO uint32_t line = 0;
-};
-
-exti_prN ext_pr_clear_flag[7];
-
-void ext_pr_init() {
-    for (int i = 0; i < 7; ++i) {
-        switch (i) {
-        case 0:
-            ext_pr_clear_flag[i].prX = &EXTI->PR1;
-            ext_pr_clear_flag[i].imrX = &EXTI->IMR1;
-            ext_pr_clear_flag[i].line = LL_EXTI_LINE_21;
-            break;
-        case 1:
-            // ext_pr[i].pr = &EXTI->PR1;
-            // ext_pr[i].line = LL_EXTI_LINE_21;
-            break;
-
-        default:
-            break;
-        }
-    }
-}
 void comp_ext_disable(const int& compN) {
-    WRITE_REG(ext_pr_clear_flag[compN].prX, &ext_pr_clear_flag[compN].line); // TODO LL_EXTI_ClearFlag_X_XX(LL_EXTI_LINE_XX)LL_EXTI_LINE_21
-    CLEAR_BIT(ext_pr_clear_flag[compN].imrX, &ext_pr_clear_flag[compN].line);
-    switch (compN) {
-    case 0:
-        // WRITE_REG(EXTI->PR1, LL_EXTI_LINE_21); // TODO
-        LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_21);
-
-        // CLEAR_BIT(EXTI->IMR1, LL_EXTI_LINE_21);
-        LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_21);
-        break;
-    case 1:
-        LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_22);
-        LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_22);
-        break;
-    case 2:
-        LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_29);
-        LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_29);
-        break;
-    case 3:
-        LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_30);
-        LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_30);
-        break;
-    case 4:
-        LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_31);
-        LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_31);
-        break;
-    case 5:
-        LL_EXTI_ClearFlag_32_63(LL_EXTI_LINE_32);
-        LL_EXTI_DisableIT_32_63(LL_EXTI_LINE_32);
-        break;
-    case 6:
-        LL_EXTI_ClearFlag_32_63(LL_EXTI_LINE_33);
-        LL_EXTI_DisableIT_32_63(LL_EXTI_LINE_33);
-        break;
-    }
+    const exti_prN& tmp = reg_flags[compN];
+    WRITE_REG(*tmp.prX, tmp.line); // LL_EXTI_ClearFlag_X_XX(LL_EXTI_LINE_XX);
+    CLEAR_BIT(*tmp.imrX, tmp.line); // LL_EXTI_DisableIT_X_XX(LL_EXTI_LINE_XX);
 }
 
 void comp_set_data(const int& compN, const int& data) {
-    switch (compN) {
-    case 0:
-        LL_DAC_ConvertData12RightAligned(DAC1, LL_DAC_CHANNEL_1, data);
-        break;
-    case 1:
-        LL_DAC_ConvertData12RightAligned(DAC1, LL_DAC_CHANNEL_2, data);
-        break;
-    case 2:
-        LL_DAC_ConvertData12RightAligned(DAC3, LL_DAC_CHANNEL_1, data);
-        break;
-    case 3:
-        LL_DAC_ConvertData12RightAligned(DAC3, LL_DAC_CHANNEL_2, data);
-        break;
-    case 4:
-        LL_DAC_ConvertData12RightAligned(DAC4, LL_DAC_CHANNEL_1, data);
-        break;
-    case 5:
-        LL_DAC_ConvertData12RightAligned(DAC4, LL_DAC_CHANNEL_2, data);
-        break;
-    case 6:
-        LL_DAC_ConvertData12RightAligned(DAC2, LL_DAC_CHANNEL_1, data);
-        break;
-    }
+    MODIFY_REG(*reg_flags[compN].pregSet, DAC_DHR12R1_DACC1DHR, data); // LL_DAC_ConvertData12RightAligned(DAC1, LL_DAC_CHANNEL_1, data);
 }
 
 uint32_t comp_read_data(const int& compN) {
-    uint32_t data = 0;
-    switch (compN) {
-    case 0:
-        data = LL_DAC_RetrieveOutputData(DAC1, LL_DAC_CHANNEL_1);
-        break;
-    case 1:
-        data = LL_DAC_RetrieveOutputData(DAC1, LL_DAC_CHANNEL_2);
-        break;
-    case 2:
-        data = LL_DAC_RetrieveOutputData(DAC3, LL_DAC_CHANNEL_1);
-        break;
-    case 3:
-        data = LL_DAC_RetrieveOutputData(DAC3, LL_DAC_CHANNEL_2);
-        break;
-    case 4:
-        data = LL_DAC_RetrieveOutputData(DAC4, LL_DAC_CHANNEL_1);
-        break;
-    case 5:
-        data = LL_DAC_RetrieveOutputData(DAC4, LL_DAC_CHANNEL_2);
-        break;
-    case 6:
-        data = LL_DAC_RetrieveOutputData(DAC2, LL_DAC_CHANNEL_1);
-        break;
-    }
-    return data;
+    return READ_BIT(*reg_flags[compN].pregRead, DAC_DOR1_DACC1DOR); // data = LL_DAC_RetrieveOutputData(DAC1, LL_DAC_CHANNEL_1);
 }
 
-COMP_TypeDef* comp_def(const int& i) {
+COMP_TypeDef* comp_def(const int& i) { // TODO ?
     switch (i) {
     case 0:
         return COMP1;
@@ -739,45 +529,46 @@ COMP_TypeDef* comp_def(const int& i) {
 
 // COMPs IQR Handlers
 void COMP1_2_3_IRQ() { // line 21, 22, 29
-    // if (READ_BIT(EXTI->PR1, LL_EXTI_LINE_21) == LL_EXTI_LINE_21){} // TODO заменить на это
+    const uint32_t t = TIM2->CNT;
     if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_21)) {
         comp_ext_disable(0);
-        jump_func(0);
+        jump_func(0, t);
     }
     if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_22)) {
         comp_ext_disable(1);
-        jump_func(1);
+        jump_func(1, t);
     }
     if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_29)) {
         comp_ext_disable(2);
-        jump_func(2);
+        jump_func(2, t);
     }
 }
 
 void COMP4_5_6_IRQ(void) { // line 30, 31, 32
+    const uint32_t t = TIM2->CNT;
     if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_30)) {
         comp_ext_disable(3);
-        jump_func(3);
+        jump_func(3, t);
     }
     if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_31)) {
         comp_ext_disable(4);
-        jump_func(4);
+        jump_func(4, t);
     }
     if (LL_EXTI_IsActiveFlag_32_63(LL_EXTI_LINE_32)) {
         comp_ext_disable(5);
-        jump_func(5);
+        jump_func(5, t);
     }
 }
 
 void COMP7_IRQ(void) { // line 33
+    const uint32_t t = TIM2->CNT;
     if (LL_EXTI_IsActiveFlag_32_63(LL_EXTI_LINE_33)) {
         comp_ext_disable(6);
-        jump_func(6);
+        jump_func(6, t);
     }
 }
 
-void jump_off(const int& a) {
-    const uint32_t t = TIM2->CNT;
+void jump_off(const int& a, const uint32_t& t) {
     if (f[a] == 0) {
         f[a] = 1;
     }
@@ -791,8 +582,7 @@ void jump_off(const int& a) {
     }
 }
 
-void jump_on(const int& a) {
-    const uint32_t t = TIM2->CNT;
+void jump_on(const int& a, const uint32_t& t) {
     if (f[a] == 0) {
         f[a] = 1;
         tim[a][0] = t;
@@ -800,6 +590,86 @@ void jump_on(const int& a) {
     if (f[a] == 2) {
         f[a] = 3;
         tim[a][1] = t;
+    }
+}
+
+void reg_init() {
+    for (int i = 0; i < 7; ++i) {
+        switch (i) {
+        case 0:
+            reg_flags[i].line = LL_EXTI_LINE_21;
+            reg_flags[i].prX = &EXTI->PR1; // LL_EXTI_ClearFlag_X_XX(LL_EXTI_LINE_XX)
+            reg_flags[i].imrX = &EXTI->IMR1; // LL_EXTI_ .. En ... Dis ...ableIT_X_XX(LL_EXTI_LINE_XX);
+            reg_flags[i].emrX = &EXTI->EMR1; // LL_EXTI_ .. En ... Dis ...ableEvent_0_31(LL_EXTI_LINE_21);
+            reg_flags[i].ftsrX = &EXTI->FTSR1; // LL_EXTI_ .. En ... Dis ...ableFallingTrig_0_31(LL_EXTI_LINE_21);
+            reg_flags[i].rtsrX = &EXTI->RTSR1; // LL_EXTI_ .. En ... Dis ...ableRisingTrig_0_31(LL_EXTI_LINE_21);
+            reg_flags[i].pregSet = __DAC_PTR_REG_OFFSET(DAC1->DHR12R1, (LL_DAC_CHANNEL_1 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
+            reg_flags[i].pregRead = __DAC_PTR_REG_OFFSET(DAC1->DOR1, (LL_DAC_CHANNEL_1 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
+            break;
+        case 1:
+            reg_flags[i].line = LL_EXTI_LINE_22;
+            reg_flags[i].prX = &EXTI->PR1;
+            reg_flags[i].imrX = &EXTI->IMR1;
+            reg_flags[i].emrX = &EXTI->EMR1;
+            reg_flags[i].ftsrX = &EXTI->FTSR1;
+            reg_flags[i].rtsrX = &EXTI->RTSR1;
+            reg_flags[i].pregSet = __DAC_PTR_REG_OFFSET(DAC1->DHR12R1, (LL_DAC_CHANNEL_2 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
+            reg_flags[i].pregRead = __DAC_PTR_REG_OFFSET(DAC1->DOR1, (LL_DAC_CHANNEL_2 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
+            break;
+        case 2:
+            reg_flags[i].line = LL_EXTI_LINE_29;
+            reg_flags[i].prX = &EXTI->PR1;
+            reg_flags[i].imrX = &EXTI->IMR1;
+            reg_flags[i].emrX = &EXTI->EMR1;
+            reg_flags[i].ftsrX = &EXTI->FTSR1;
+            reg_flags[i].rtsrX = &EXTI->RTSR1;
+            reg_flags[i].pregSet = __DAC_PTR_REG_OFFSET(DAC3->DHR12R1, (LL_DAC_CHANNEL_1 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
+            reg_flags[i].pregRead = __DAC_PTR_REG_OFFSET(DAC3->DOR1, (LL_DAC_CHANNEL_1 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
+            break;
+        case 3:
+            reg_flags[i].line = LL_EXTI_LINE_30;
+            reg_flags[i].prX = &EXTI->PR1;
+            reg_flags[i].imrX = &EXTI->IMR1;
+            reg_flags[i].emrX = &EXTI->EMR1;
+            reg_flags[i].ftsrX = &EXTI->FTSR1;
+            reg_flags[i].rtsrX = &EXTI->RTSR1;
+            reg_flags[i].pregSet = __DAC_PTR_REG_OFFSET(DAC3->DHR12R1, (LL_DAC_CHANNEL_2 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
+            reg_flags[i].pregRead = __DAC_PTR_REG_OFFSET(DAC3->DOR1, (LL_DAC_CHANNEL_2 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
+            break;
+        case 4:
+            reg_flags[i].line = LL_EXTI_LINE_31;
+            reg_flags[i].prX = &EXTI->PR1;
+            reg_flags[i].imrX = &EXTI->IMR1;
+            reg_flags[i].emrX = &EXTI->EMR1;
+            reg_flags[i].ftsrX = &EXTI->FTSR1;
+            reg_flags[i].rtsrX = &EXTI->RTSR1;
+            reg_flags[i].pregSet = __DAC_PTR_REG_OFFSET(DAC4->DHR12R1, (LL_DAC_CHANNEL_1 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
+            reg_flags[i].pregRead = __DAC_PTR_REG_OFFSET(DAC4->DOR1, (LL_DAC_CHANNEL_1 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
+            break;
+        case 5:
+            reg_flags[i].line = LL_EXTI_LINE_32;
+            reg_flags[i].prX = &EXTI->PR2;
+            reg_flags[i].imrX = &EXTI->IMR2;
+            reg_flags[i].emrX = &EXTI->EMR2;
+            reg_flags[i].ftsrX = &EXTI->FTSR2;
+            reg_flags[i].rtsrX = &EXTI->RTSR2;
+            reg_flags[i].pregSet = __DAC_PTR_REG_OFFSET(DAC4->DHR12R1, (LL_DAC_CHANNEL_2 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
+            reg_flags[i].pregRead = __DAC_PTR_REG_OFFSET(DAC4->DOR1, (LL_DAC_CHANNEL_2 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
+            break;
+        case 6:
+            reg_flags[i].line = LL_EXTI_LINE_33;
+            reg_flags[i].prX = &EXTI->PR2;
+            reg_flags[i].imrX = &EXTI->IMR2;
+            reg_flags[i].emrX = &EXTI->EMR2;
+            reg_flags[i].ftsrX = &EXTI->FTSR2;
+            reg_flags[i].rtsrX = &EXTI->RTSR2;
+            reg_flags[i].pregSet = __DAC_PTR_REG_OFFSET(DAC2->DHR12R1, (LL_DAC_CHANNEL_1 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
+            reg_flags[i].pregRead = __DAC_PTR_REG_OFFSET(DAC2->DOR1, (LL_DAC_CHANNEL_1 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
+            break;
+
+        default:
+            break;
+        }
     }
 }
 
