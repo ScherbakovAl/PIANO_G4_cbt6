@@ -5,7 +5,7 @@ volatile uint32_t ChipN_32 = { 23 }; // <<<< номер чипа здесь ук
 __attribute__((aligned(32))) volatile uint32_t bin_data_32[512] = {};
 const uint32_t bin_data_32_length = sizeof(bin_data_32); // 2 kB
 
-static const uint32_t ADRESS_CHIP_NUMBER = 0x08003800; // здесь храним номер чипа
+static const uint32_t ADRESS_CHIP_NUMBER = 0x08004800; // здесь храним номер чипа
 static const uint32_t MAIN_FIRMWARE = 0x08008000; // здесь основная прошивка
 static volatile uint32_t ADRESS_FOR_JUMP = 0; // указать куда прыгнуть
 
@@ -36,6 +36,16 @@ void g4_bootloader() {
         Read_uint32(ADRESS_CHIP_NUMBER, &ChipN_32, 4);
     }
 
+    tx_s[0] = (uint8_t)ChipN_32;
+    rx_s[0] = (uint8_t)ChipN_32;
+    for (int i = 1; i < 5; ++i) {
+        tx_s[i] = 0;
+        rx_s[i] = 0;
+    }
+
+    LL_USART_RequestRxDataFlush(USART2); // TODO ?
+    LL_mDelay(1);
+    LL_USART_RequestRxDataFlush(USART2); // TODO ?
 
     // UART init
     LL_USART_DisableDirectionTx(USART2); // один или несколько MCU должны быть подтянуты к pull_UP ! // надо ли? проверить..
@@ -48,12 +58,9 @@ void g4_bootloader() {
     LL_USART_Enable(USART2);
     LL_USART_DisableDirectionTx(USART2);   // один или несколько MCU должны быть подтянуты к pull_UP !
 
-    tx_s[0] = (uint8_t)ChipN_32;
-    rx_s[0] = (uint8_t)ChipN_32;
-    for (int i = 1; i < 5; ++i) {
-        tx_s[i] = 0;
-        rx_s[i] = 0;
-    }
+    LL_USART_RequestRxDataFlush(USART2); // TODO ?
+    LL_mDelay(1);
+    LL_USART_RequestRxDataFlush(USART2); // TODO ?
 
     while (1) {
         if (flag_for_jump == 1) {
@@ -73,7 +80,7 @@ void communication() {
     const uint8_t rx_command = rx_s[0];
 
     if (rx_command == (uint8_t)command_bootloader::echo) {
-        Set_tx_s((uint8_t)ChipN_32, 0, 0, 0, (uint8_t)chip_states::bootloader);
+        Set_tx_s((uint8_t)ChipN_32, 0, 0, 0, (uint8_t)chip_states::boot2);
         USART2_Send_settings();
     }
 
@@ -102,7 +109,7 @@ void communication() {
 }
 
 void Reset() {
-    LL_mDelay(200);
+    LL_mDelay(20);
     NVIC_SystemReset();
 }
 

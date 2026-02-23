@@ -11,7 +11,8 @@
 
 std::deque<nt> dequeOn;
 
-static const uint32_t ADRESS_CHIP_NUMBER = 0x08003800; // здесь храним номер чипа
+// static const uint32_t ADRESS_CHIP_NUMBER_older = 0x08003800;
+static const uint32_t ADRESS_CHIP_NUMBER = 0x08004800; // здесь храним номер чипа
 
 using JumpFuncPtr = void(*)(const int& a, const uint32_t& t); // подмена функции jump_func на jump_on или jump_off
 JumpFuncPtr jump_func = nullptr;
@@ -19,6 +20,13 @@ JumpFuncPtr jump_func = nullptr;
 // main
 void g4() {
     Read_uint32(ADRESS_CHIP_NUMBER, &chipAdress, 4);
+
+
+    // FlashPageInfo_t info = GetPageAndBank(ADRESS_CHIP_NUMBER, 4);
+    // Erase(info.start_page, info.bank); // очистить номер чипа
+    // Flash_uint32(ADRESS_CHIP_NUMBER, &chipAdress, 4);
+
+
     static const uint8_t note = chipAdress * 7;
     tx_settings[0] = chipAdress;
     rx_settings[0] = chipAdress;
@@ -674,7 +682,7 @@ void reg_init() {
 }
 
 void Read_uint32(uint32_t Address, volatile uint32_t* pData, uint32_t Size) {
-
+    
     if (pData == NULL || Size == 0) {
         return;
     }
@@ -710,3 +718,191 @@ void Read_uint32(uint32_t Address, volatile uint32_t* pData, uint32_t Size) {
 
     __set_PRIMASK(primask);
 }
+
+/*
+FlashPageInfo_t GetPageAndBank(uint32_t Address, uint32_t Size) {
+    FlashPageInfo_t info = { 0 };
+
+    // Размер страницы Flash для STM32G474
+#define FLASH_PAGE_SIZE     2048    // 2 KB
+#define FLASH_BANK1_BASE    0x08000000
+#define FLASH_BANK2_BASE    0x08010000
+#define FLASH_BANK_SIZE     (64 * 1024)  // 64 KB на банк
+
+// Проверка, что адрес находится в области Flash памяти
+    if (Address < FLASH_BASE || Address >= (FLASH_BASE + FLASH_SIZE)) {
+        info.is_valid = 0;
+        return info;
+    }
+
+    // Вычисляем конечный адрес диапазона
+    uint32_t end_address = Address + Size - 1;
+
+    // Проверка, что весь диапазон находится в области Flash
+    if (end_address >= (FLASH_BASE + FLASH_SIZE)) {
+        info.is_valid = 0;
+        return info;
+    }
+
+    // Определяем банк для начального адреса
+    if (Address < FLASH_BANK2_BASE) {
+        info.bank = FLASH_BANK_1;
+        // Вычисляем номер начальной страницы относительно начала Bank 1
+        info.start_page = (Address - FLASH_BANK1_BASE) / FLASH_PAGE_SIZE;
+
+        // Вычисляем номер конечной страницы
+        if (end_address < FLASH_BANK2_BASE) {
+            // Весь диапазон находится в Bank 1
+            info.end_page = (end_address - FLASH_BANK1_BASE) / FLASH_PAGE_SIZE;
+        }
+        else {
+         // Диапазон пересекает границу банков
+         // Возвращаем последнюю страницу Bank 1
+            info.end_page = 31;  // Последняя страница Bank 1
+        }
+    }
+    else {
+        info.bank = FLASH_BANK_2;
+        // Вычисляем номер начальной страницы относительно начала Bank 2
+        info.start_page = (Address - FLASH_BANK2_BASE) / FLASH_PAGE_SIZE;
+        // Вычисляем номер конечной страницы
+        info.end_page = (end_address - FLASH_BANK2_BASE) / FLASH_PAGE_SIZE;
+    }
+
+    info.is_valid = 1;
+
+#undef FLASH_PAGE_SIZE
+#undef FLASH_BANK1_BASE
+#undef FLASH_BANK2_BASE
+#undef FLASH_BANK_SIZE
+
+    return info;
+}
+
+void Erase(uint32_t Page, uint32_t Banks) {
+    HAL_FLASH_Unlock();
+    // Использование низкоуровневой функции FLASH_PageErase требует ручного управления!
+    FLASH_PageErase(Page, Banks);
+
+    // Барьер памяти - предотвращает переупорядочивание операций
+    __DMB();
+
+    // КРИТИЧНО: Необходимо дождаться завершения операции стирания!
+    FLASH_WaitForLastOperation(FLASH_TIMEOUT_VALUE);
+
+    // КРИТИЧНО: Очистить биты управления стиранием (PER и PNB)
+    CLEAR_BIT(FLASH->CR, (FLASH_CR_PER | FLASH_CR_PNB));
+
+    // Очистить флаги ошибок, если они есть
+    __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
+
+    // Барьер памяти перед разблокировкой
+    __DMB();
+    HAL_FLASH_Lock();
+}
+
+void Flash_uint32(uint32_t Address, volatile uint32_t* Data, uint32_t size) {
+    // Проверка выравнивания адреса по 8 байт для DOUBLEWORD
+    if (Address % 8 != 0) {
+        Set_tx_s((uint8_t)response::fail, 0x11, 0x11, 0x11, 0x11);
+        USART2_Send_settings();
+        return;
+    }
+
+    // Проверяем корректность параметров
+    if (size == 0 || Data == NULL) {
+        Set_tx_s((uint8_t)response::fail, 0x22, 0x22, 0x22, 0x22);
+        USART2_Send_settings();
+        return;
+    }
+
+    // Используем критическую секцию для безопасности вызова из прерывания
+    uint32_t primask = __get_PRIMASK();
+    // __disable_irq();
+
+    HAL_FLASH_Unlock();
+
+    // Барьер памяти перед началом операций
+    __DMB();
+
+    // Вычисляем количество DOUBLEWORD для записи (каждое = 8 байт = 2 uint32_t)
+    uint32_t doublewords_count = (size + 7) / 8;
+
+    // Записываем данные в цикле
+    for (uint32_t i = 0; i < doublewords_count; i++) {
+        uint32_t current_address = Address + (i * 8);
+        uint64_t current_data;
+
+        // Индекс в массиве uint32_t (каждый doubleword = 2 uint32_t)
+        uint32_t idx = i * 2;
+
+        // Вычисляем сколько байт осталось записать
+        uint32_t remaining_bytes = size - (i * 8);
+
+        // Формируем 64-битное значение из двух 32-битных
+        // Little Endian: младшие биты идут первыми
+        if (remaining_bytes >= 8) {
+            // Полный doubleword - два uint32_t
+            current_data = ((uint64_t)Data[idx]) | (((uint64_t)Data[idx + 1]) << 32);
+        }
+        else if (remaining_bytes >= 4) {
+            // Есть хотя бы один полный uint32_t
+            current_data = ((uint64_t)Data[idx]) | 0xFFFFFFFF00000000ULL;
+
+            if (remaining_bytes > 4) {
+                // Есть еще частичный второй uint32_t
+                uint32_t partial = Data[idx + 1];
+                uint32_t valid_bytes = remaining_bytes - 4;
+                uint32_t mask = (1UL << (valid_bytes * 8)) - 1;
+                partial &= mask;
+                current_data = ((uint64_t)Data[idx]) | (((uint64_t)partial) << 32);
+            }
+        }
+        else {
+            // Меньше 4 байт - только часть первого uint32_t
+            uint32_t partial = Data[idx];
+            uint32_t mask = (1UL << (remaining_bytes * 8)) - 1;
+            partial &= mask;
+            current_data = (uint64_t)partial;
+            // Заполняем остаток в текущем doubleword значением 0xFF
+            for (uint32_t b = remaining_bytes; b < 8; b++) {
+                current_data |= ((uint64_t)0xFF) << (b * 8);
+            }
+        }
+
+        // Выполняем запись
+        HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, current_address, current_data);
+
+        // Барьер памяти после записи
+        __DMB();
+
+        FLASH_WaitForLastOperation(FLASH_TIMEOUT_VALUE);
+    }
+
+    // Барьер памяти перед завершением
+    __DMB();
+    HAL_FLASH_Lock();
+
+    __set_PRIMASK(primask);
+}
+
+void Set_tx_s(uint8_t a, uint8_t b, uint8_t c, uint8_t d, uint8_t e) {
+    tx_settings[0] = a;
+    tx_settings[1] = b;
+    tx_settings[2] = c;
+    tx_settings[3] = d;
+    tx_settings[4] = e;
+}
+
+void USART2_Send_settings() {
+    LL_USART_EnableDirectionTx(USART2); // отправлять только при ВЫКЛюченных остальных слэйв-трансляторах.. иначе замыкание
+    while (!LL_USART_IsActiveFlag_TXE(USART2)) {}
+    for (int i = 0; i < tx_settings_length; i++) {
+        LL_USART_TransmitData9(USART2, tx_settings[i]);
+        while (!LL_USART_IsActiveFlag_TXE(USART2)) {}
+    }
+    while (!LL_USART_IsActiveFlag_TC(USART2)) {}
+    LL_USART_DisableDirectionTx(USART2);
+    LL_USART_ClearFlag_TC(USART2);
+}
+*/

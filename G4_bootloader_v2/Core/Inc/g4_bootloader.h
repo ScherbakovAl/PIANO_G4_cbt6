@@ -20,8 +20,10 @@ extern "C" {
     };
 
     enum class chip_states {
-        bootloader = 1,
-        piano
+        none = 0,
+        boot1 = 1,
+        piano,
+        boot2
     };
 
     enum class response {
