@@ -19,6 +19,7 @@ extern "C" {
 
     volatile uint32_t chipAdress = 0; // 1-13-on, 14-26-off
     const int allChipCount = 27; // до этого значения считает таймер
+    const uint8_t count_comparators = 7;
 
     // !!!  ***  !!!   подтяжки линий (в UART нужен UP для Tx у одного из g4)+(UP для линии прерываний)   !!!  ***  !!!
 
@@ -39,11 +40,11 @@ extern "C" {
     uint32_t windowReTRigger1 = 0;
     uint32_t windowReTRigger2 = 0;
 
-    volatile uint32_t tim[7][2] = { };
-    uint32_t tim_off[7][2] = { };
-    int comp[7][3] = { };
-    int comp_calibration[7] = { };
-    int cc_fl[7] = { }; // флаг. Проверять состояние данного компаратора при калибровке или нет
+    // volatile uint32_t tim[count_comparators][2] = { };
+    // uint32_t tim_off[count_comparators][2] = { };
+    // int comp[count_comparators][3] = { };
+    // int comp_calibration[count_comparators] = { };
+    // int cc_fl[count_comparators] = { }; // флаг. Проверять состояние данного компаратора при калибровке или нет
 
     struct default_comp {
         int green_on = 2200;
@@ -54,7 +55,7 @@ extern "C" {
     };
     struct default_comp def_comp;
 
-    volatile int8_t f[7] = { 0 };
+    // volatile int8_t f[count_comparators] = { 0 };
     volatile int fl = 1;
     volatile int flag_Service_command = 1;
 
@@ -108,20 +109,62 @@ extern "C" {
         __IO uint32_t* pregRead = nullptr;
     };
 
-    // Структура для хранения информации о странице и банке
-    // typedef struct {
-    //     uint32_t start_page;    // Начальная страница
-    //     uint32_t end_page;      // Конечная страница (если диапазон охватывает несколько страниц)
-    //     uint32_t bank;          // Банк памяти (FLASH_BANK_1 или FLASH_BANK_2)
-    //     uint8_t  is_valid;      // Флаг валидности (1 - валидно, 0 - адрес вне диапазона Flash)
-    // } FlashPageInfo_t;
-
-    // enum class response {
-    //     ok = 0x0C,
-    //     fail = 0xDD
+    // enum class dots {
+    //     on_0,
+    //     on_1,
+    //     off_0,
+    //     off_1,
+    //     off_2
     // };
 
-    exti_prN reg_flags[7];
+    enum class positions {
+        p_0,
+        p_1,
+        p_2,
+        p_3,
+        p_4,
+        p_5,
+        p_6,
+        p_7
+    };
+
+    // class DotsArray {
+    // private:
+    //     int8_t f[count_comparators];
+
+    // public:
+    //     int8_t& operator[](dots d) {
+    //         return f[static_cast<size_t>(d)];
+    //     }
+
+    //     const int8_t& operator[](dots d) const {
+    //         return f[static_cast<size_t>(d)];
+    //     }
+    //     // // Для обычного целочисленного доступа (если нужно)
+    //     // int8_t& operator[](size_t index) {
+    //     //     return f[index];
+    //     // }
+    //     // const int8_t& operator[](size_t index) const {
+    //     //     return f[index];
+    //     // }
+    // };
+    // DotsArray arr;
+
+    struct comparator {
+        volatile uint8_t index = 0;
+        // dots dot = dots::on_0; // TODO ?
+        volatile positions pos = positions::p_0;
+        volatile uint8_t cc_fl = 0;
+        volatile uint32_t tim_0 = 0;
+        volatile uint32_t tim_1 = 0;
+        volatile uint32_t data[3] = {};
+        // uint32_t data_1 = 0;
+        // uint32_t data_2 = 0;
+        volatile uint32_t comp_calibration = 0;
+        exti_prN reg_flags;
+    };
+
+    // exti_prN reg_flags[count_comparators]; // TODO выключи это тоже - переезжай в struct comparator
 
     subcommand service_commands = subcommand::working;
     int service_flag = 0;
@@ -157,7 +200,23 @@ extern "C" {
     void Read_uint32(uint32_t Address, volatile uint32_t* pData, uint32_t Size);
     void jump_off(const int& a, const uint32_t& t);
     void jump_on(const int& a, const uint32_t& t);
+    void jump_conserts(const int& a, const uint32_t& t);
     void reg_init();
+
+
+    // Структура для хранения информации о странице и банке (для работы с flash)
+    // typedef struct {
+    //     uint32_t start_page;    // Начальная страница
+    //     uint32_t end_page;      // Конечная страница (если диапазон охватывает несколько страниц)
+    //     uint32_t bank;          // Банк памяти (FLASH_BANK_1 или FLASH_BANK_2)
+    //     uint8_t  is_valid;      // Флаг валидности (1 - валидно, 0 - адрес вне диапазона Flash)
+    // } FlashPageInfo_t;
+
+    // enum class response {
+    //     ok = 0x0C,
+    //     fail = 0xDD
+    // };
+
     // FlashPageInfo_t GetPageAndBank(uint32_t Address, uint32_t Size);
     // void Erase(uint32_t Page, uint32_t Banks);
     // void Flash_uint32(uint32_t Address, volatile uint32_t* Data, uint32_t size);

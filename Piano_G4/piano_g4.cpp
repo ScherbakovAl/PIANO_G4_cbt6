@@ -7,9 +7,11 @@
 
 #include "piano_g4.hpp"
 #include "stm32g4xx.h"
-#include "deque"
+#include <deque>
+#include <vector>
 
 std::deque<nt> dequeOn;
+std::vector<comparator> comparators; // TODO нужно проинициализировать
 
 // static const uint32_t ADRESS_CHIP_NUMBER_older = 0x08003800;
 static const uint32_t ADRESS_CHIP_NUMBER = 0x08004800; // здесь храним номер чипа
@@ -27,19 +29,19 @@ void g4() {
     // Flash_uint32(ADRESS_CHIP_NUMBER, &chipAdress, 4);
 
 
-    static const uint8_t note = chipAdress * 7;
+    static const uint8_t note = chipAdress * count_comparators;
     tx_settings[0] = chipAdress;
     rx_settings[0] = chipAdress;
 
 
-    if (chipAdress > 13) { // выбор функции для прыжка для on или off
-        jump_func = jump_off;
-    }
-    else {
-        jump_func = jump_on;
-    }
+    // if (chipAdress > 13) { // выбор функции для прыжка для on или off
+    //     jump_func = jump_off;
+    // }
+    // else {
+    //     jump_func = jump_on;
+    // }
+    jump_func = jump_conserts;
 
-    reg_init();
 
     GPIOB->BSRR = 0x80; // pB7 // tim interrupter // чтобы включился счёт таймера с H7
 
@@ -78,21 +80,28 @@ void g4() {
     LL_DAC_Enable(DAC2, LL_DAC_CHANNEL_1);
 
 
-    for (int i = 0; i < 7; ++i) { // установки по-умолчанию
+    for (int i = 0; i < count_comparators; ++i) { // установки по-умолчанию
+        comparator c;
         if (chipAdress > 13) {
-            comp[i][0] = def_comp.green_off;
-            comp[i][1] = def_comp.red_off;
-            comp[i][2] = def_comp.grey_off;
+            // comp[i][0] = def_comp.green_off;
+            // comp[i][1] = def_comp.red_off;
+            // comp[i][2] = def_comp.grey_off;
+            c.data[0] = def_comp.green_off;
+            c.data[1] = def_comp.red_off;
+            c.data[2] = def_comp.grey_off;
         }
         else {
-            comp[i][0] = def_comp.green_on;
-            comp[i][1] = def_comp.red_on;
+            // comp[i][0] = def_comp.green_on;
+            // comp[i][1] = def_comp.red_on;
+            c.data[0] = def_comp.green_on;
+            c.data[1] = def_comp.red_on;
 
         }
-        comp_calibration[i] = 0;
-        comp_set_data(i, comp[i][0]);
+        comparators.push_back(c);
+        comp_set_data(i, comparators[i].data[0]);
         LL_COMP_Enable(comp_def(i));
     }
+    reg_init();
     //---------------------------------
 
 // можно для неполных сделать точку срабатывания высоко, выше 1000 и не будет компаратор срабатывать..
@@ -113,83 +122,170 @@ void g4() {
 
     USART2_Send(compN_, dot_, 0);
 
-    if (chipAdress > 13) {
-        while (1) {
-            // off
-            for (uint8_t i = 0; i < 7; ++i) {
-                if (f[i] != 0) { // for note off
-                    if (f[i] == 1) {
-                        setCOMP_extVoltage_Up(i);
-                        comp_set_data(i, comp[i][0]);
-                        f[i] = 2;
-                        comp_ext_enable(i);
-                    }
-                    if (f[i] == 3) {
-                        tim_off[i][0] = TIM5->CNT;
-                        comp_set_data(i, comp[i][1]);
-                        f[i] = 4;
-                        comp_ext_enable(i);
 
-                    }
-                     // TODO видимо эту    vvvvv    секцию надо удалить      vvvvv
-                    // if (f[i] == 4 && TIM5->CNT - tim_off[i][0] > windowReTRigger1) {
-                    //     comp_ext_disable(i);
-                    //     comp_set_data(i, comp[i][2]); // ?
-                    //     setCOMP_extVoltage_Down(i); // ?
-                    //     f[i] = 0; // ?
-                    //     comp_ext_enable(i);
-                    // }
-                    if (f[i] == 5) {
-                        tim_off[i][1] = TIM5->CNT;
-                        f[i] = 6;
-                        nt n{ note + i, timeLength(tim[i][0], tim[i][1]) };
-                        dequeOn.push_back(n);
-                    }
-                    if (f[i] == 6 && TIM5->CNT - tim_off[i][1] > windowReTRigger2) {
-                        comp_set_data(i, comp[i][2]);
-                        setCOMP_extVoltage_Down(i);
-                        f[i] = 0;
-                        comp_ext_enable(i);
-                    }
+    // if (chipAdress > 13) {
+    //     while (1) {
+    //         // off
+    //         for (uint8_t i = 0; i < 7; ++i) {
+    //             if (f[i] != 0) { // for note off
+    //                 if (f[i] == 1) {
+    //                     setCOMP_extVoltage_Up(i);
+    //                     comp_set_data(i, comp[i][0]);
+    //                     f[i] = 2;
+    //                     comp_ext_enable(i);
+    //                 }
+    //                 if (f[i] == 3) {
+    //                     tim_off[i][0] = TIM5->CNT;
+    //                     comp_set_data(i, comp[i][1]);
+    //                     f[i] = 4;
+    //                     comp_ext_enable(i);
+
+    //                 }
+    //                  // TODO видимо эту    vvvvv    секцию надо удалить      vvvvv
+    //                 // if (f[i] == 4 && TIM5->CNT - tim_off[i][0] > windowReTRigger1) {
+    //                 //     comp_ext_disable(i);
+    //                 //     comp_set_data(i, comp[i][2]); // ?
+    //                 //     setCOMP_extVoltage_Down(i); // ?
+    //                 //     f[i] = 0; // ?
+    //                 //     comp_ext_enable(i);
+    //                 // }
+    //                 if (f[i] == 5) {
+    //                     tim_off[i][1] = TIM5->CNT;
+    //                     f[i] = 6;
+    //                     // nt n{ note + i, timeLength(tim[i][0], tim[i][1]) };
+    //                     dequeOn.push_back(nt(note + i, timeLength(tim[i][0], tim[i][1])));
+    //                 }
+    //                 if (f[i] == 6 && TIM5->CNT - tim_off[i][1] > windowReTRigger2) {
+    //                     comp_set_data(i, comp[i][2]);
+    //                     setCOMP_extVoltage_Down(i);
+    //                     f[i] = 0;
+    //                     comp_ext_enable(i);
+    //                 }
+    //             }
+    //         }
+    //         check();
+    //         service();
+    //     }
+    // }
+
+    // else {
+    //     while (1) {
+    //         // on
+    //         for (uint8_t i = 0; i < 7; ++i) {
+    //             if (f[i] != 0) { // for note on
+    //                 if (f[i] == 1) {
+    //                     tim_off[i][0] = TIM5->CNT; // TIM5 (p100us)
+    //                     comp_set_data(i, comp[i][1]);
+    //                     f[i] = 2;
+    //                     comp_ext_enable(i);
+    //                 }
+    //                 if (f[i] == 2 && TIM5->CNT - tim_off[i][0] > windowReTRigger1) {
+    //                     comp_ext_disable(i);
+    //                     comp_set_data(i, comp[i][0]);
+    //                     f[i] = 0;
+    //                     comp_ext_enable(i);
+    //                 }
+    //                 if (f[i] == 3) {
+    //                     tim_off[i][1] = TIM5->CNT;
+    //                     f[i] = 4;
+    //                     // nt n{ note + i, timeLength(tim[i][0], tim[i][1]) };
+    //                     dequeOn.push_back(nt(note + i, timeLength(tim[i][0], tim[i][1])));
+    //                 }
+    //                 if (f[i] == 4 && TIM5->CNT - tim_off[i][1] > windowReTRigger2) {
+    //                     comp_set_data(i, comp[i][0]);
+    //                     f[i] = 0;
+    //                     comp_ext_enable(i);
+    //                 }
+    //             }
+    //         }
+    //         check();
+    //         service();
+    //     }
+    // }
+
+
+    // for conserts
+    while (1) {
+
+
+        for (auto& comp : comparators) {
+            auto& i = comp.index;
+            auto& f = comp.pos;
+            if (f != positions::p_0) {
+                if (f == positions::p_1) {
+                    comp.tim_0 = TIM5->CNT; // TIM5 (p100us)
+                    comp_set_data(i, comp.data[0]); // TODO ?
+                    f = positions::p_2;
+                    comp_ext_enable(i);
+                }
+                if (f == positions::p_2 && TIM5->CNT - comp.tim_0 > windowReTRigger1) {
+                    comp_ext_disable(i);
+                    comp_set_data(i, comp.data[2]);
+                    f = positions::p_0;
+                    comp_ext_enable(i);
+                }
+                if (f == positions::p_3) {
+                    comp.tim_0 = TIM5->CNT;
+                    comp_set_data(i, comp.data[1]);
+                    f = positions::p_4;
+                    comp_ext_enable(i);
+                    dequeOn.push_back(nt(note + i, timeLength(comp.tim_0, comp.tim_1)));
+                }
+                if (f == positions::p_4 && TIM5->CNT - comp.tim_0 > windowReTRigger1) {
+                    comp_ext_disable(i);
+                    comp_set_data(i, comp.data[2]);
+                    setCOMP_extVoltage_Down(i);
+                    f = positions::p_0;
+                    comp_ext_enable(i);
+                }
+                if (f == positions::p_4) {
+                    comp_set_data(i, comp.data[0]);
+                    f = positions::p_0;
+                    comp_ext_enable(i);
                 }
             }
-            check();
-            service();
         }
-    }
-    else {
-        while (1) {
-            // on
-            for (uint8_t i = 0; i < 7; ++i) {
-                if (f[i] != 0) { // for note on
-                    if (f[i] == 1) {
-                        tim_off[i][0] = TIM5->CNT; // TIM5 (p100us)
-                        comp_set_data(i, comp[i][1]);
-                        f[i] = 2;
-                        comp_ext_enable(i);
-                    }
-                    if (f[i] == 2 && TIM5->CNT - tim_off[i][0] > windowReTRigger1) {
-                        comp_ext_disable(i);
-                        comp_set_data(i, comp[i][0]);
-                        f[i] = 0;
-                        comp_ext_enable(i);
-                    }
-                    if (f[i] == 3) {
-                        tim_off[i][1] = TIM5->CNT;
-                        f[i] = 4;
-                        nt n{ note + i, timeLength(tim[i][0], tim[i][1]) };
-                        dequeOn.push_back(n);
-                    }
-                    if (f[i] == 4 && TIM5->CNT - tim_off[i][1] > windowReTRigger2) {
-                        comp_set_data(i, comp[i][0]);
-                        f[i] = 0;
-                        comp_ext_enable(i);
-                    }
-                }
-            }
-            check();
-            service();
-        }
+
+        // for (uint8_t i = 0; i < 7; ++i) {
+        //     if (f[i] != 0) { // for note off
+        //         if (f[i] == 1) {
+        //             tim_off[i][0] = TIM5->CNT; // TIM5 (p100us)
+        //             comp_set_data(i, comp[i][(uint8_t)dots::on_0]);
+        //             f[i] = 2;
+        //             comp_ext_enable(i);
+        //         }
+        //         if (f[i] == 2 && TIM5->CNT - tim_off[i][0] > windowReTRigger1) {
+        //             comp_ext_disable(i);
+        //             comp_set_data(i, comp[i][2]);
+        //             f[i] = 0;
+        //             comp_ext_enable(i);
+        //         }
+        //         if (f[i] == 3) {
+        //             tim_off[i][0] = TIM5->CNT;
+        //             comp_set_data(i, comp[i][1]);
+        //             f[i] = 4;
+        //             comp_ext_enable(i);
+        //             dequeOn.push_back(nt(note + i, timeLength(tim[i][0], tim[i][1])));
+        //         }
+        //         if (f[i] == 4 && TIM5->CNT - tim_off[i][0] > windowReTRigger1) {
+        //             comp_ext_disable(i);
+        //             comp_set_data(i, comp[i][2]);
+        //             setCOMP_extVoltage_Down(i);
+        //             f[i] = 0;
+        //             comp_ext_enable(i);
+        //         }
+        //         if (f[i] == 4) {
+        //             comp_set_data(i, comp[i][0]);
+        //             f[i] = 0;
+        //             comp_ext_enable(i);
+        //         }
+        //     }
+        // }
+
+
+
+        check();
+        service();
     }
 }
 
@@ -214,19 +310,34 @@ void check() {
 void service() {
     while (service_flag) {
         if (service_commands == subcommand::working && flag_Service_command) {
-            for (uint8_t i = 0; i < 7; ++i) {
-                cc_fl[i] = 1;
+            // for (uint8_t i = 0; i < 7; ++i) {
+            //     cc_fl[i] = 1;
+            // }
+            for (auto& comp : comparators) {
+                comp.cc_fl = 1;
             }
             for (int a = 0; a < 4092; ++a) {
-                for (uint8_t i = 0; i < 7; ++i) {
-                    if (cc_fl[i]) {
-                        comp_set_data(i, a);
-                        if (LL_COMP_ReadOutputLevel(comp_def(i)) == LL_COMP_OUTPUT_LEVEL_LOW) {
-                            comp_calibration[i] = a;
-                            cc_fl[i] = 0;
+                // for (uint8_t i = 0; i < 7; ++i) {
+                //     if (cc_fl[i]) {
+                //         comp_set_data(i, a);
+                //         if (LL_COMP_ReadOutputLevel(comp_def(i)) == LL_COMP_OUTPUT_LEVEL_LOW) {
+                //             comp_calibration[i] = a;
+                //             cc_fl[i] = 0;
+                //         }
+                //         if (a > 4090) {
+                //             comp_calibration[i] = 0;
+                //         }
+                //     }
+                // }
+                for (auto& comp : comparators) {
+                    if (comp.cc_fl) {
+                        comp_set_data(comp.index, a);
+                        if (LL_COMP_ReadOutputLevel(comp_def(comp.index)) == LL_COMP_OUTPUT_LEVEL_LOW) {
+                            comp.comp_calibration = a;
+                            comp.cc_fl = 0;
                         }
                         if (a > 4090) {
-                            comp_calibration[i] = 0;
+                            comp.comp_calibration = 0;
                         }
                     }
                 }
@@ -235,10 +346,15 @@ void service() {
         }
         if (service_commands == subcommand::exit) {
             if (!dequeOn.empty()) dequeOn.clear();
-            for (int i = 0; i < 7; ++i) {
-                f[i] = 0;
-                comp_set_data(i, comp[i][0]);
-                comp_ext_enable(i);
+            // for (int i = 0; i < 7; ++i) {
+            //     f[i] = 0;
+            //     comp_set_data(i, comp[i][0]);
+            //     comp_ext_enable(i);
+            // }
+            for (auto& comp : comparators) {
+                comp.pos = positions::p_0;
+                comp_set_data(comp.index, comp.data[0]);
+                comp_ext_enable(comp.index);
             }
             service_flag = 0;
             USART2_Send(compN_, 0, (int)subcommand::stop_calibration);
@@ -248,17 +364,25 @@ void service() {
 
 void resetData() {
     // if (!dequeOn.empty()) dequeOn.clear(); // TODO нельзя это очищать из прерывания!!!
-    for (uint8_t i = 0; i < 7; ++i) {
-        f[i] = 0;
+    // for (uint8_t i = 0; i < 7; ++i) {
+    //     f[i] = 0;
+    //     comp_ext_disable(i);
+    //     comp_set_data(i, comp[i][0]);
+    //     comp_ext_enable(i);
+    // }
+    for (auto& comp : comparators) {
+        auto& i = comp.index;
+        comp.pos = positions::p_0;
         comp_ext_disable(i);
-        comp_set_data(i, comp[i][0]);
+        comp_set_data(i, comp.data[0]);
         comp_ext_enable(i);
     }
 }
 
 void comp_refresh(uint8_t& n) {
     comp_ext_disable(n);
-    comp_set_data(n, comp[n][0]);
+    // comp_set_data(n, comp[n][0]);
+    comp_set_data(n, comparators[n].data[0]);
     comp_ext_enable(n);
 }
 
@@ -277,13 +401,16 @@ void communication() {
     }
 
     if (rx_settings[0] == (uint8_t)command::read_comp_value) {
-        USART2_Send(compN_, dot_, comp[compN_][dot_]);
+        // USART2_Send(compN_, dot_, comp[compN_][dot_]);
+        USART2_Send(compN_, dot_, comparators[compN_].data[dot_]);
     }
 
     if (rx_settings[0] == (uint8_t)command::set_comp_value) {
-        comp[compN_][dot_] = convert8x2to16(a_, b_);
-        USART2_Send(compN_, dot_, comp[compN_][dot_]);
-        f[compN_] = 0;
+        // comp[compN_][dot_] = convert8x2to16(a_, b_);
+        comparators[compN_].data[dot_] = convert8x2to16(a_, b_);
+        // USART2_Send(compN_, dot_, comp[compN_][dot_]);
+        USART2_Send(compN_, dot_, comparators[compN_].data[dot_]);
+        comparators[compN_].pos = positions::p_0;
     }
 
     if (rx_settings[0] == (uint8_t)command::read_comp_setting) {
@@ -319,7 +446,7 @@ void communication() {
 void calibration() {
     comp_ext_disable(compN_);
     comp_set_data(compN_, 0);
-    f[compN_] = 0;
+    comparators[compN_].pos = positions::p_0;
     for (int a = 0; a < 4092; ++a) {
         comp_set_data(compN_, a);
         if (LL_COMP_ReadOutputLevel(comp_def(compN_)) == LL_COMP_OUTPUT_LEVEL_LOW) {
@@ -331,16 +458,21 @@ void calibration() {
             break;
         }
     }
-    f[compN_] = 0;
-    comp_set_data(compN_, comp[compN_][0]);
+    comparators[compN_].pos = positions::p_0;
+    // comp_set_data(compN_, comp[compN_][0]);
+    comp_set_data(compN_, comparators[compN_].data[0]);
     comp_ext_enable(compN_);
 }
 
 void all_calibration() {
     if (b_ == (uint8_t)subcommand::start_calibration) {
-        for (int i = 0; i < 7; ++i) {
-            f[i] = 0;
-            comp_ext_disable(i);
+        // for (int i = 0; i < 7; ++i) {
+        //     f[i] = 0;
+        //     comp_ext_disable(i);
+        // }
+        for (auto& comp : comparators) {
+            comp.pos = positions::p_0;
+            comp_ext_disable(comp.index);
         }
         service_commands = subcommand::working;
         service_flag = 1;
@@ -349,9 +481,13 @@ void all_calibration() {
     else if (b_ == (uint8_t)subcommand::read_calibration) {
         pause(4);
         USART2_Send(compN_, 0, (int)subcommand::read_calibration);
-        for (int i = 0; i < 7; ++i) {
+        // for (int i = 0; i < 7; ++i) {
+        //     pause(6);
+        //     USART2_Send(i, 0, comp_calibration[i]);
+        // }
+        for (auto& comp : comparators) {
             pause(6);
-            USART2_Send(i, 0, comp_calibration[i]);
+            USART2_Send((const uint8_t &)comp.index, 0, (const int&)comp.comp_calibration);
         }
         flag_Service_command = 1;
     }
@@ -463,7 +599,7 @@ conv16to8x2 convert16to8x2(const int& a) { // TODO AI - Проблема: Неп
 
 // COMPs controls
 void setCOMP_extVoltage_Up(const int& compN) {
-    const exti_prN& tmp = reg_flags[compN];
+    const exti_prN& tmp = (const exti_prN&)comparators[compN].reg_flags;
     CLEAR_BIT(*tmp.ftsrX, tmp.line); // LL_EXTI_DisableFallingTrig_0_31(LL_EXTI_LINE_21);
     SET_BIT(*tmp.rtsrX, tmp.line); // LL_EXTI_EnableRisingTrig_0_31(LL_EXTI_LINE_21);
     WRITE_REG(*tmp.prX, tmp.line); // LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_21);
@@ -471,7 +607,7 @@ void setCOMP_extVoltage_Up(const int& compN) {
 }
 
 void setCOMP_extVoltage_Down(const int& compN) {
-    const exti_prN& tmp = reg_flags[compN];
+    const exti_prN& tmp = (const exti_prN&)comparators[compN].reg_flags;
     CLEAR_BIT(*tmp.rtsrX, tmp.line); // LL_EXTI_DisableRisingTrig_0_31(LL_EXTI_LINE_21);
     SET_BIT(*tmp.ftsrX, tmp.line); // LL_EXTI_EnableFallingTrig_0_31(LL_EXTI_LINE_21);
     WRITE_REG(*tmp.prX, tmp.line); // LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_21);
@@ -491,22 +627,22 @@ void set_ALL_COMP_extVoltage_Down() {
 }
 
 void comp_ext_enable(const int& compN) {
-    const exti_prN& tmp = reg_flags[compN];
+    const exti_prN& tmp = (const exti_prN&)comparators[compN].reg_flags;
     SET_BIT(*tmp.imrX, tmp.line); // LL_EXTI_EnableIT_X_XX(LL_EXTI_LINE_XX);
 }
 
 void comp_ext_disable(const int& compN) {
-    const exti_prN& tmp = reg_flags[compN];
+    const exti_prN& tmp = (const exti_prN&)comparators[compN].reg_flags;
     WRITE_REG(*tmp.prX, tmp.line); // LL_EXTI_ClearFlag_X_XX(LL_EXTI_LINE_XX);
     CLEAR_BIT(*tmp.imrX, tmp.line); // LL_EXTI_DisableIT_X_XX(LL_EXTI_LINE_XX);
 }
 
 void comp_set_data(const int& compN, const int& data) {
-    MODIFY_REG(*reg_flags[compN].pregSet, DAC_DHR12R1_DACC1DHR, data); // LL_DAC_ConvertData12RightAligned(DAC1, LL_DAC_CHANNEL_1, data);
+    MODIFY_REG(*comparators[compN].reg_flags.pregSet, DAC_DHR12R1_DACC1DHR, data); // LL_DAC_ConvertData12RightAligned(DAC1, LL_DAC_CHANNEL_1, data);
 }
 
 uint32_t comp_read_data(const int& compN) {
-    return READ_BIT(*reg_flags[compN].pregRead, DAC_DOR1_DACC1DOR); // data = LL_DAC_RetrieveOutputData(DAC1, LL_DAC_CHANNEL_1);
+    return READ_BIT(*comparators[compN].reg_flags.pregRead, DAC_DOR1_DACC1DOR); // data = LL_DAC_RetrieveOutputData(DAC1, LL_DAC_CHANNEL_1);
 }
 
 COMP_TypeDef* comp_def(const int& i) { // TODO ?
@@ -576,103 +712,132 @@ void COMP7_IRQ(void) { // line 33
     }
 }
 
-void jump_off(const int& a, const uint32_t& t) {
-    if (f[a] == 0) {
-        f[a] = 1;
+// void jump_off(const int& a, const uint32_t& t) {
+//     if (f[a] == 0) {
+//         f[a] = 1;
+//     }
+//     if (f[a] == 2) {
+//         f[a] = 3;
+//         tim[a][0] = t;
+//     }
+//     if (f[a] == 4) {
+//         f[a] = 5;
+//         tim[a][1] = t;
+//     }
+// }
+
+// void jump_on(const int& a, const uint32_t& t) {
+//     if (f[a] == 0) {
+//         f[a] = 1;
+//         tim[a][0] = t;
+//     }
+//     if (f[a] == 2) {
+//         f[a] = 3;
+//         tim[a][1] = t;
+//     }
+// }
+
+// for conserts
+// void jump_conserts(const int& a, const uint32_t& t) {
+//     if (f[a] == 0) {
+//         f[a] = 1;
+//     }
+//     if (f[a] == 2) {
+//         f[a] = 3;
+//         tim[a][0] = t;
+//     }
+//     if (f[a] == 4) {
+//         f[a] = 5;
+//         tim[a][1] = t;
+//     }
+// }
+
+void jump_conserts(const int& a, const uint32_t& t) {
+    if (comparators[a].pos == positions::p_0) {
+        comparators[a].pos = positions::p_1;
     }
-    if (f[a] == 2) {
-        f[a] = 3;
-        tim[a][0] = t;
+    if (comparators[a].pos == positions::p_2) {
+        comparators[a].pos = positions::p_3;
+        comparators[a].tim_0 = t;
     }
-    if (f[a] == 4) {
-        f[a] = 5;
-        tim[a][1] = t;
+    if (comparators[a].pos == positions::p_4) {
+        comparators[a].pos = positions::p_5;
+        comparators[a].tim_1 = t;
     }
 }
 
-void jump_on(const int& a, const uint32_t& t) {
-    if (f[a] == 0) {
-        f[a] = 1;
-        tim[a][0] = t;
-    }
-    if (f[a] == 2) {
-        f[a] = 3;
-        tim[a][1] = t;
-    }
-}
-
-void reg_init() {
-    for (int i = 0; i < 7; ++i) {
+void reg_init() { // @@ обязательно после того, как произойдёт pus_back
+    for (int i = 0; i < count_comparators; ++i) {
         switch (i) {
         case 0:
-            reg_flags[i].line = LL_EXTI_LINE_21;
-            reg_flags[i].prX = &EXTI->PR1; // LL_EXTI_ClearFlag_X_XX(LL_EXTI_LINE_XX)
-            reg_flags[i].imrX = &EXTI->IMR1; // LL_EXTI_ .. En ... Dis ...ableIT_X_XX(LL_EXTI_LINE_XX);
-            reg_flags[i].emrX = &EXTI->EMR1; // LL_EXTI_ .. En ... Dis ...ableEvent_0_31(LL_EXTI_LINE_21);
-            reg_flags[i].ftsrX = &EXTI->FTSR1; // LL_EXTI_ .. En ... Dis ...ableFallingTrig_0_31(LL_EXTI_LINE_21);
-            reg_flags[i].rtsrX = &EXTI->RTSR1; // LL_EXTI_ .. En ... Dis ...ableRisingTrig_0_31(LL_EXTI_LINE_21);
-            reg_flags[i].pregSet = __DAC_PTR_REG_OFFSET(DAC1->DHR12R1, (LL_DAC_CHANNEL_1 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
-            reg_flags[i].pregRead = __DAC_PTR_REG_OFFSET(DAC1->DOR1, (LL_DAC_CHANNEL_1 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
+            comparators[i].reg_flags.line = LL_EXTI_LINE_21;
+            comparators[i].reg_flags.prX = &EXTI->PR1; // LL_EXTI_ClearFlag_X_XX(LL_EXTI_LINE_XX)
+            comparators[i].reg_flags.imrX = &EXTI->IMR1; // LL_EXTI_ .. En ... Dis ...ableIT_X_XX(LL_EXTI_LINE_XX);
+            comparators[i].reg_flags.emrX = &EXTI->EMR1; // LL_EXTI_ .. En ... Dis ...ableEvent_0_31(LL_EXTI_LINE_21);
+            comparators[i].reg_flags.ftsrX = &EXTI->FTSR1; // LL_EXTI_ .. En ... Dis ...ableFallingTrig_0_31(LL_EXTI_LINE_21);
+            comparators[i].reg_flags.rtsrX = &EXTI->RTSR1; // LL_EXTI_ .. En ... Dis ...ableRisingTrig_0_31(LL_EXTI_LINE_21);
+            comparators[i].reg_flags.pregSet = __DAC_PTR_REG_OFFSET(DAC1->DHR12R1, (LL_DAC_CHANNEL_1 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
+            comparators[i].reg_flags.pregRead = __DAC_PTR_REG_OFFSET(DAC1->DOR1, (LL_DAC_CHANNEL_1 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
             break;
         case 1:
-            reg_flags[i].line = LL_EXTI_LINE_22;
-            reg_flags[i].prX = &EXTI->PR1;
-            reg_flags[i].imrX = &EXTI->IMR1;
-            reg_flags[i].emrX = &EXTI->EMR1;
-            reg_flags[i].ftsrX = &EXTI->FTSR1;
-            reg_flags[i].rtsrX = &EXTI->RTSR1;
-            reg_flags[i].pregSet = __DAC_PTR_REG_OFFSET(DAC1->DHR12R1, (LL_DAC_CHANNEL_2 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
-            reg_flags[i].pregRead = __DAC_PTR_REG_OFFSET(DAC1->DOR1, (LL_DAC_CHANNEL_2 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
+            comparators[i].reg_flags.line = LL_EXTI_LINE_22;
+            comparators[i].reg_flags.prX = &EXTI->PR1;
+            comparators[i].reg_flags.imrX = &EXTI->IMR1;
+            comparators[i].reg_flags.emrX = &EXTI->EMR1;
+            comparators[i].reg_flags.ftsrX = &EXTI->FTSR1;
+            comparators[i].reg_flags.rtsrX = &EXTI->RTSR1;
+            comparators[i].reg_flags.pregSet = __DAC_PTR_REG_OFFSET(DAC1->DHR12R1, (LL_DAC_CHANNEL_2 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
+            comparators[i].reg_flags.pregRead = __DAC_PTR_REG_OFFSET(DAC1->DOR1, (LL_DAC_CHANNEL_2 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
             break;
         case 2:
-            reg_flags[i].line = LL_EXTI_LINE_29;
-            reg_flags[i].prX = &EXTI->PR1;
-            reg_flags[i].imrX = &EXTI->IMR1;
-            reg_flags[i].emrX = &EXTI->EMR1;
-            reg_flags[i].ftsrX = &EXTI->FTSR1;
-            reg_flags[i].rtsrX = &EXTI->RTSR1;
-            reg_flags[i].pregSet = __DAC_PTR_REG_OFFSET(DAC3->DHR12R1, (LL_DAC_CHANNEL_1 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
-            reg_flags[i].pregRead = __DAC_PTR_REG_OFFSET(DAC3->DOR1, (LL_DAC_CHANNEL_1 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
+            comparators[i].reg_flags.line = LL_EXTI_LINE_29;
+            comparators[i].reg_flags.prX = &EXTI->PR1;
+            comparators[i].reg_flags.imrX = &EXTI->IMR1;
+            comparators[i].reg_flags.emrX = &EXTI->EMR1;
+            comparators[i].reg_flags.ftsrX = &EXTI->FTSR1;
+            comparators[i].reg_flags.rtsrX = &EXTI->RTSR1;
+            comparators[i].reg_flags.pregSet = __DAC_PTR_REG_OFFSET(DAC3->DHR12R1, (LL_DAC_CHANNEL_1 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
+            comparators[i].reg_flags.pregRead = __DAC_PTR_REG_OFFSET(DAC3->DOR1, (LL_DAC_CHANNEL_1 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
             break;
         case 3:
-            reg_flags[i].line = LL_EXTI_LINE_30;
-            reg_flags[i].prX = &EXTI->PR1;
-            reg_flags[i].imrX = &EXTI->IMR1;
-            reg_flags[i].emrX = &EXTI->EMR1;
-            reg_flags[i].ftsrX = &EXTI->FTSR1;
-            reg_flags[i].rtsrX = &EXTI->RTSR1;
-            reg_flags[i].pregSet = __DAC_PTR_REG_OFFSET(DAC3->DHR12R1, (LL_DAC_CHANNEL_2 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
-            reg_flags[i].pregRead = __DAC_PTR_REG_OFFSET(DAC3->DOR1, (LL_DAC_CHANNEL_2 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
+            comparators[i].reg_flags.line = LL_EXTI_LINE_30;
+            comparators[i].reg_flags.prX = &EXTI->PR1;
+            comparators[i].reg_flags.imrX = &EXTI->IMR1;
+            comparators[i].reg_flags.emrX = &EXTI->EMR1;
+            comparators[i].reg_flags.ftsrX = &EXTI->FTSR1;
+            comparators[i].reg_flags.rtsrX = &EXTI->RTSR1;
+            comparators[i].reg_flags.pregSet = __DAC_PTR_REG_OFFSET(DAC3->DHR12R1, (LL_DAC_CHANNEL_2 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
+            comparators[i].reg_flags.pregRead = __DAC_PTR_REG_OFFSET(DAC3->DOR1, (LL_DAC_CHANNEL_2 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
             break;
         case 4:
-            reg_flags[i].line = LL_EXTI_LINE_31;
-            reg_flags[i].prX = &EXTI->PR1;
-            reg_flags[i].imrX = &EXTI->IMR1;
-            reg_flags[i].emrX = &EXTI->EMR1;
-            reg_flags[i].ftsrX = &EXTI->FTSR1;
-            reg_flags[i].rtsrX = &EXTI->RTSR1;
-            reg_flags[i].pregSet = __DAC_PTR_REG_OFFSET(DAC4->DHR12R1, (LL_DAC_CHANNEL_1 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
-            reg_flags[i].pregRead = __DAC_PTR_REG_OFFSET(DAC4->DOR1, (LL_DAC_CHANNEL_1 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
+            comparators[i].reg_flags.line = LL_EXTI_LINE_31;
+            comparators[i].reg_flags.prX = &EXTI->PR1;
+            comparators[i].reg_flags.imrX = &EXTI->IMR1;
+            comparators[i].reg_flags.emrX = &EXTI->EMR1;
+            comparators[i].reg_flags.ftsrX = &EXTI->FTSR1;
+            comparators[i].reg_flags.rtsrX = &EXTI->RTSR1;
+            comparators[i].reg_flags.pregSet = __DAC_PTR_REG_OFFSET(DAC4->DHR12R1, (LL_DAC_CHANNEL_1 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
+            comparators[i].reg_flags.pregRead = __DAC_PTR_REG_OFFSET(DAC4->DOR1, (LL_DAC_CHANNEL_1 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
             break;
         case 5:
-            reg_flags[i].line = LL_EXTI_LINE_32;
-            reg_flags[i].prX = &EXTI->PR2;
-            reg_flags[i].imrX = &EXTI->IMR2;
-            reg_flags[i].emrX = &EXTI->EMR2;
-            reg_flags[i].ftsrX = &EXTI->FTSR2;
-            reg_flags[i].rtsrX = &EXTI->RTSR2;
-            reg_flags[i].pregSet = __DAC_PTR_REG_OFFSET(DAC4->DHR12R1, (LL_DAC_CHANNEL_2 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
-            reg_flags[i].pregRead = __DAC_PTR_REG_OFFSET(DAC4->DOR1, (LL_DAC_CHANNEL_2 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
+            comparators[i].reg_flags.line = LL_EXTI_LINE_32;
+            comparators[i].reg_flags.prX = &EXTI->PR2;
+            comparators[i].reg_flags.imrX = &EXTI->IMR2;
+            comparators[i].reg_flags.emrX = &EXTI->EMR2;
+            comparators[i].reg_flags.ftsrX = &EXTI->FTSR2;
+            comparators[i].reg_flags.rtsrX = &EXTI->RTSR2;
+            comparators[i].reg_flags.pregSet = __DAC_PTR_REG_OFFSET(DAC4->DHR12R1, (LL_DAC_CHANNEL_2 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
+            comparators[i].reg_flags.pregRead = __DAC_PTR_REG_OFFSET(DAC4->DOR1, (LL_DAC_CHANNEL_2 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
             break;
         case 6:
-            reg_flags[i].line = LL_EXTI_LINE_33;
-            reg_flags[i].prX = &EXTI->PR2;
-            reg_flags[i].imrX = &EXTI->IMR2;
-            reg_flags[i].emrX = &EXTI->EMR2;
-            reg_flags[i].ftsrX = &EXTI->FTSR2;
-            reg_flags[i].rtsrX = &EXTI->RTSR2;
-            reg_flags[i].pregSet = __DAC_PTR_REG_OFFSET(DAC2->DHR12R1, (LL_DAC_CHANNEL_1 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
-            reg_flags[i].pregRead = __DAC_PTR_REG_OFFSET(DAC2->DOR1, (LL_DAC_CHANNEL_1 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
+            comparators[i].reg_flags.line = LL_EXTI_LINE_33;
+            comparators[i].reg_flags.prX = &EXTI->PR2;
+            comparators[i].reg_flags.imrX = &EXTI->IMR2;
+            comparators[i].reg_flags.emrX = &EXTI->EMR2;
+            comparators[i].reg_flags.ftsrX = &EXTI->FTSR2;
+            comparators[i].reg_flags.rtsrX = &EXTI->RTSR2;
+            comparators[i].reg_flags.pregSet = __DAC_PTR_REG_OFFSET(DAC2->DHR12R1, (LL_DAC_CHANNEL_1 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
+            comparators[i].reg_flags.pregRead = __DAC_PTR_REG_OFFSET(DAC2->DOR1, (LL_DAC_CHANNEL_1 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
             break;
 
         default:
@@ -682,7 +847,7 @@ void reg_init() {
 }
 
 void Read_uint32(uint32_t Address, volatile uint32_t* pData, uint32_t Size) {
-    
+
     if (pData == NULL || Size == 0) {
         return;
     }
