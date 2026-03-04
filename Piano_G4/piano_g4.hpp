@@ -17,7 +17,17 @@ extern "C" {
     using uint = unsigned int;
     using cuint = const uint;
 
+// <<<<<<< Updated upstream
     volatile uint32_t chipAdress = 0; // 1-13-on, 14-26-off
+// =======
+    // #define CHAddr 3
+    
+    // #if CHAddr > 13
+    // #define CHipForNoteOFF
+    // #endif
+    
+    // const int chipAdress = 3; // 1-13-on, 14-26-off
+// >>>>>>> Stashed changes
     const int allChipCount = 27; // до этого значения считает таймер
 
     // !!!  ***  !!!   подтяжки линий (в UART нужен UP для Tx у одного из g4)+(UP для линии прерываний)   !!!  ***  !!!
