@@ -23,7 +23,7 @@ extern "C" {
     // !!!  ***  !!!   подтяжки линий (в UART нужен UP для Tx у одного из g4)+(UP для линии прерываний)   !!!  ***  !!!
 
     // data
-    uint8_t tx_data[4] = { }; // TODO uint8_t->uint32_t ??? !!! ->  45: LL_DMA_SetMemoryAddress(DMA1, LL_DMA_CHANNEL_1, <<<(uint32_t)>>> tx_data); <<<< !!!!
+    uint8_t tx_data[5] = { }; // TODO uint8_t->uint32_t ??? !!! ->  45: LL_DMA_SetMemoryAddress(DMA1, LL_DMA_CHANNEL_1, <<<(uint32_t)>>> tx_data); <<<< !!!!
     const int tx_dataLength = sizeof(tx_data);
 
     // settings
@@ -87,6 +87,12 @@ extern "C" {
         boot2
     };
 
+    enum class event{
+        None,
+        On,
+        Off
+    };
+
     struct conv16to8x2 {
         uint8_t a = 0;
         uint8_t b = 0;
@@ -95,6 +101,7 @@ extern "C" {
     struct nt {
         uint8_t note = 0;
         uint32_t timelegth = 0;
+        event ev = event::None;
     };
 
     struct exti_prN {
@@ -157,6 +164,7 @@ extern "C" {
     void Read_uint32(uint32_t Address, volatile uint32_t* pData, uint32_t Size);
     void jump_off(const int& a, const uint32_t& t);
     void jump_on(const int& a, const uint32_t& t);
+    void jump_cand(const int& a, const uint32_t& t);
     void reg_init();
     // FlashPageInfo_t GetPageAndBank(uint32_t Address, uint32_t Size);
     // void Erase(uint32_t Page, uint32_t Banks);

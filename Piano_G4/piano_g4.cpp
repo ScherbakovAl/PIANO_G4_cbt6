@@ -32,12 +32,13 @@ void g4() {
     rx_settings[0] = chipAdress;
 
 
-    if (chipAdress > 13) { // выбор функции для прыжка для on или off
-        jump_func = jump_off;
-    }
-    else {
-        jump_func = jump_on;
-    }
+    // if (chipAdress > 13) { // выбор функции для прыжка для on или off
+    //     jump_func = jump_off;
+    // }
+    // else {
+    //     jump_func = jump_on;
+    // }
+    jump_func = jump_cand;
 
     reg_init();
 
@@ -87,6 +88,7 @@ void g4() {
         else {
             comp[i][0] = def_comp.green_on;
             comp[i][1] = def_comp.red_on;
+            comp[i][2] = def_comp.grey_off;
 
         }
         comp_calibration[i] = 0;
@@ -107,11 +109,13 @@ void g4() {
         windowReTRigger2 = 10 * 60; // = 60ms // TIM5 (p100us)
     }
     else { // ship ON
-        windowReTRigger1 = 10 * 30; // = 30ms // TIM5 (p100us)
-        windowReTRigger2 = 10 * 50; // = 50ms // TIM5 (p100us)
+        windowReTRigger1 = 10 * 30 * 5; // = 30ms // TIM5 (p100us)
+        windowReTRigger2 = 10 * 50 * 5; // = 50ms // TIM5 (p100us)
     }
 
     USART2_Send(compN_, dot_, 0);
+
+    set_ALL_COMP_extVoltage_Down(); // for on
 
     if (chipAdress > 13) {
         while (1) {
@@ -162,29 +166,76 @@ void g4() {
             // on
             for (uint8_t i = 0; i < 7; ++i) {
                 if (f[i] != 0) { // for note on
+
+
+
+
+
+
+
+
+
+
                     if (f[i] == 1) {
                         tim_off[i][0] = TIM5->CNT; // TIM5 (p100us)
                         comp_set_data(i, comp[i][1]);
                         f[i] = 2;
                         comp_ext_enable(i);
                     }
+
+
+
                     if (f[i] == 2 && TIM5->CNT - tim_off[i][0] > windowReTRigger1) {
                         comp_ext_disable(i);
                         comp_set_data(i, comp[i][0]);
                         f[i] = 0;
                         comp_ext_enable(i);
                     }
+
+
+
                     if (f[i] == 3) {
                         tim_off[i][1] = TIM5->CNT;
                         f[i] = 4;
-                        nt n{ note + i, timeLength(tim[i][0], tim[i][1]) };
-                        dequeOn.push_back(n);
-                    }
-                    if (f[i] == 4 && TIM5->CNT - tim_off[i][1] > windowReTRigger2) {
-                        comp_set_data(i, comp[i][0]);
-                        f[i] = 0;
+                        // nt n{ note + i, timeLength(tim[i][0], tim[i][1]) };
+                        dequeOn.push_back(nt(note + i, timeLength(tim[i][0], tim[i][1]), event::On)); // ON
+
+                        // comp_ext_disable(i);
+                        comp_set_data(i, comp[i][2]); // точка для OFF
+                        setCOMP_extVoltage_Up(i);
                         comp_ext_enable(i);
                     }
+
+
+
+                    if (f[i] == 5) {
+                        dequeOn.push_back(nt(note + i, 50000, event::Off)); // ON
+                        comp_set_data(i, comp[i][0]);
+                        setCOMP_extVoltage_Down(i);
+                        comp_ext_enable(i);
+                        f[i] = 0;
+                    }
+
+
+
+
+                    // if (f[i] == 4 && TIM5->CNT - tim_off[i][1] > windowReTRigger2) {
+                    //     comp_set_data(i, comp[i][0]);
+                    //     f[i] = 0;
+                    //     comp_ext_enable(i);
+                    // }
+
+
+
+
+
+
+
+
+
+
+
+
                 }
             }
             check();
@@ -201,6 +252,7 @@ void check() {
         tx_data[1] = (u & 0xff << 16) >> 16;
         tx_data[2] = (u & 0xff << 8) >> 8;
         tx_data[3] = u & 0xff;
+        tx_data[4] = (uint8_t)x.ev;
         LL_DMA_DisableChannel(DMA1, LL_DMA_CHANNEL_1);
         LL_DMA_SetDataLength(DMA1, LL_DMA_CHANNEL_1, tx_dataLength);
         LL_USART_ClearFlag_TC(USART2);
@@ -601,6 +653,42 @@ void jump_on(const int& a, const uint32_t& t) {
     }
 }
 
+void jump_cand(const int& a, const uint32_t& t) {
+
+
+
+
+
+
+
+    if (f[a] == 0) {
+        f[a] = 1;
+        tim[a][0] = t;
+    }
+
+
+
+
+    if (f[a] == 2) {
+        f[a] = 3;
+        tim[a][1] = t;
+    }
+
+
+
+
+    if (f[a] == 4) {
+        f[a] = 5;
+    }
+
+
+
+
+
+
+
+}
+
 void reg_init() {
     for (int i = 0; i < 7; ++i) {
         switch (i) {
@@ -682,7 +770,7 @@ void reg_init() {
 }
 
 void Read_uint32(uint32_t Address, volatile uint32_t* pData, uint32_t Size) {
-    
+
     if (pData == NULL || Size == 0) {
         return;
     }
