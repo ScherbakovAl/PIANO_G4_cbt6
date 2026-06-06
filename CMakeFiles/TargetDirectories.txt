@@ -1,6 +1,0 @@
-/home/sche/Документы/programming/VSCode_STM32/Piano/PIANO_G4_cbt6/CMakeFiles/PIANO_G4_cbt6.dir
-/home/sche/Документы/programming/VSCode_STM32/Piano/PIANO_G4_cbt6/CMakeFiles/edit_cache.dir
-/home/sche/Документы/programming/VSCode_STM32/Piano/PIANO_G4_cbt6/CMakeFiles/rebuild_cache.dir
-/home/sche/Документы/programming/VSCode_STM32/Piano/PIANO_G4_cbt6/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir
-/home/sche/Документы/programming/VSCode_STM32/Piano/PIANO_G4_cbt6/cmake/stm32cubemx/CMakeFiles/edit_cache.dir
-/home/sche/Документы/programming/VSCode_STM32/Piano/PIANO_G4_cbt6/cmake/stm32cubemx/CMakeFiles/rebuild_cache.dir

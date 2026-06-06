@@ -1,4 +1,11 @@
 build
 
+# CMake build artifacts (generated; leak local paths)
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+build.ninja
+
 # OpenTimestamps upgrade backups
 *.ots.bak
