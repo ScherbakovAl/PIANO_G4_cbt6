@@ -1,0 +1,22 @@
+PIANO_G4_cbt6 — OpenTimestamps proof of existence
+=================================================
+
+Version (git tag): 0.1.1
+Commit:  0dda459bedf192f7c1053d2e1a29e769be169d59
+Tree:    cb70aa9e97e5d1bf0e4a0d96d66178f47e3b5895
+
+Repository: https://github.com/ScherbakovAl/PIANO_G4_cbt6
+Zenodo DOI: 10.5281/zenodo.20569249
+
+SHA-256 of `git archive --format=tar.gz 0.1.1`
+(note: gzip output depends on the git/gzip version, so this is an
+auxiliary anchor — the authoritative fingerprint is the git commit above):
+  9e593af13f1ea3bc1cd5d5d1c7d9dc4e80e6de9a906228750ffb5621c52089bf
+
+The git commit hash above cryptographically commits to the entire
+source tree of version 0.1.1. This text file is anchored to the
+Bitcoin blockchain via OpenTimestamps; the accompanying .ots file is
+the proof.
+
+Verify:
+  ots verify timestamps/PIANO_G4_cbt6-0.1.1.txt.ots
