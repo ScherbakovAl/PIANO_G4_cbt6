@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using these metadata."
+title: "PIANO_G4_cbt6 — Sensor board firmware for an optical digital MIDI piano"
+abstract: >-
+  Firmware for the sensor boards (STM32G474) of a self-built digital MIDI
+  piano with optical key sensing. Uses on-chip analog comparators and
+  high-resolution timers to measure hammer flight time for each key, detects
+  note-on/note-off events, reports timings to the PIANO_H7 controller over a
+  multidrop address-detect UART, and supports calibration and a custom
+  bootloader for over-the-bus firmware updates.
+type: software
+authors:
+  - family-names: Scherbakov
+    given-names: Aleksey
+    email: scherbakov.al@gmail.com
+    alias: ScherbakovAl
+repository-code: "https://github.com/ScherbakovAl/PIANO_G4_cbt6"
+url: "https://github.com/ScherbakovAl/PIANO_G4_cbt6"
+keywords:
+  - MIDI
+  - digital piano
+  - STM32
+  - STM32G4
+  - embedded firmware
+  - optical sensor
+  - analog comparator
+  - velocity sensing
+license: MIT
+version: "0.1.0"
+date-released: "2026-06-06"
+doi: 10.5281/zenodo.20569250
