@@ -60,12 +60,12 @@ used to play on a real instrument.
   [`ibis model/`](ibis%20model/).
 
 3D render of the assembled boards, with the sensor-board PCB layout and
-schematic (the full EasyEDA Pro project lives in the
-[PIANO_H7](https://github.com/ScherbakovAl/PIANO_H7) repo):
+schematic:
 
-![3D view of the assembled boards](pcb/PNG_G4/3D_Schematic_G4.png)
+![3D view of the assembled boards](pcb/PNG_G4/3D_G4.png)
 
-- [PCB layout — sensor board](pcb/PNG_G4/PCB_Schematic_G4.png)
+- [EasyEDA Pro project (`.epro2`)](pcb/ProPrj_piano_boards_v1.0_G4.epro2)
+- [PCB layout — sensor board](pcb/PNG_G4/PCB_G4.png)
 - [Schematic — sensor board](pcb/PNG_G4/reus/SCH_reus_1-sch_2026-06-18.png)
 
 ### Repository layout
@@ -152,13 +152,12 @@ MIDI-пианино с оптическим считыванием нажати�
   [`kicad_for_test_impedance/`](kicad_for_test_impedance/) и
   [`ibis model/`](ibis%20model/).
 
-3D-вид собранных плат, трассировка платы-датчика и её схема (полный проект
-EasyEDA Pro — в репозитории
-[PIANO_H7](https://github.com/ScherbakovAl/PIANO_H7)):
+3D-вид собранных плат, трассировка платы-датчика и её схема:
 
-![3D-вид собранных плат](pcb/PNG_G4/3D_Schematic_G4.png)
+![3D-вид собранных плат](pcb/PNG_G4/3D_G4.png)
 
-- [Трассировка платы — плата-датчик](pcb/PNG_G4/PCB_Schematic_G4.png)
+- [Проект EasyEDA Pro (`.epro2`)](pcb/ProPrj_piano_boards_v1.0_G4.epro2)
+- [Трассировка платы — плата-датчик](pcb/PNG_G4/PCB_G4.png)
 - [Схема — плата-датчик](pcb/PNG_G4/reus/SCH_reus_1-sch_2026-06-18.png)
 
 ### Структура репозитория
