@@ -63,10 +63,10 @@ used to play on a real instrument.
 schematic (the full EasyEDA Pro project lives in the
 [PIANO_H7](https://github.com/ScherbakovAl/PIANO_H7) repo):
 
-![3D view of the assembled boards](pcb/3D_all_2026-06-18.png)
+![3D view of the assembled boards](pcb/PNG_piano_boards_v1.0_(made)_G4/3D_Schematic_G4.png)
 
-- [PCB layout — sensor board](pcb/PCB_reuse_sensors_2026-06-18.png)
-- [Schematic — sensor board](pcb/SCH_reuse_sensors_1-rs_2026-06-18.png)
+- [PCB layout — sensor board](pcb/PNG_piano_boards_v1.0_(made)_G4/PCB_reus_G4.png)
+- [Schematic — sensor board](pcb/PNG_piano_boards_v1.0_(made)_G4/reus/SCH_reus_1-sch_2026-06-18.png)
 
 ### Repository layout
 
@@ -156,10 +156,10 @@ MIDI-пианино с оптическим считыванием нажати�
 EasyEDA Pro — в репозитории
 [PIANO_H7](https://github.com/ScherbakovAl/PIANO_H7)):
 
-![3D-вид собранных плат](pcb/3D_all_2026-06-18.png)
+![3D-вид собранных плат](pcb/PNG_piano_boards_v1.0_(made)_G4/3D_Schematic_G4.png)
 
-- [Трассировка платы — плата-датчик](pcb/PCB_reuse_sensors_2026-06-18.png)
-- [Схема — плата-датчик](pcb/SCH_reuse_sensors_1-rs_2026-06-18.png)
+- [Трассировка платы — плата-датчик](pcb/PNG_piano_boards_v1.0_(made)_G4/PCB_reus_G4.png)
+- [Схема — плата-датчик](pcb/PNG_piano_boards_v1.0_(made)_G4/reus/SCH_reus_1-sch_2026-06-18.png)
 
 ### Структура репозитория
 
