@@ -59,6 +59,15 @@ used to play on a real instrument.
   [`kicad_for_test_impedance/`](kicad_for_test_impedance/) and
   [`ibis model/`](ibis%20model/).
 
+3D render of the assembled boards, with the sensor-board PCB layout and
+schematic (the full EasyEDA Pro project lives in the
+[PIANO_H7](https://github.com/ScherbakovAl/PIANO_H7) repo):
+
+![3D view of the assembled boards](pcb/3D_all_2026-06-18.png)
+
+- [PCB layout — sensor board](pcb/PCB_reuse_sensors_2026-06-18.png)
+- [Schematic — sensor board](pcb/SCH_reuse_sensors_1-rs_2026-06-18.png)
+
 ### Repository layout
 
 ```
@@ -68,6 +77,7 @@ G4_bootloader/             Bootloader (v1)
 G4_bootloader_v2/          Bootloader (v2)
 kicad_for_test_impedance/  Impedance test (KiCad)
 ibis model/                IBIS models / signal-integrity
+pcb/                       PCB layout, schematic and 3D render (PNG)
 cmake/, CMakeLists.txt, CMakePresets.json
 ```
 
@@ -142,6 +152,15 @@ MIDI-пианино с оптическим считыванием нажати�
   [`kicad_for_test_impedance/`](kicad_for_test_impedance/) и
   [`ibis model/`](ibis%20model/).
 
+3D-вид собранных плат, трассировка платы-датчика и её схема (полный проект
+EasyEDA Pro — в репозитории
+[PIANO_H7](https://github.com/ScherbakovAl/PIANO_H7)):
+
+![3D-вид собранных плат](pcb/3D_all_2026-06-18.png)
+
+- [Трассировка платы — плата-датчик](pcb/PCB_reuse_sensors_2026-06-18.png)
+- [Схема — плата-датчик](pcb/SCH_reuse_sensors_1-rs_2026-06-18.png)
+
 ### Структура репозитория
 
 ```
@@ -151,6 +170,7 @@ G4_bootloader/             Бутлоадер (v1)
 G4_bootloader_v2/          Бутлоадер (v2)
 kicad_for_test_impedance/  Тест импеданса (KiCad)
 ibis model/                IBIS-модели / целостность сигналов
+pcb/                       Трассировка, схема и 3D-вид (PNG)
 cmake/, CMakeLists.txt, CMakePresets.json
 ```
 
