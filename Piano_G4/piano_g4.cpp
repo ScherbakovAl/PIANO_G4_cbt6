@@ -7,9 +7,6 @@
 
 #include "piano_g4.hpp"
 #include "stm32g4xx.h"
-#include "deque"
-
-std::deque<nt> dequeOn;
 
 // static const uint32_t ADRESS_CHIP_NUMBER_older = 0x08003800;
 static const uint32_t ADRESS_CHIP_NUMBER = 0x08004800; // здесь храним номер чипа
@@ -142,8 +139,7 @@ void g4() {
                     if (f[i] == 5) {
                         tim_off[i][1] = TIM5->CNT;
                         f[i] = 6;
-                        nt n{ note + i, timeLength(tim[i][0], tim[i][1]) };
-                        dequeOn.push_back(n);
+                        ev_push(note + i, sat(timeLength(tim[i][0], tim[i][1])));
                     }
                     if (f[i] == 6 && TIM5->CNT - tim_off[i][1] > windowReTRigger2) {
                         comp_set_data(i, comp[i][2]);
@@ -177,8 +173,7 @@ void g4() {
                     if (f[i] == 3) {
                         tim_off[i][1] = TIM5->CNT;
                         f[i] = 4;
-                        nt n{ note + i, timeLength(tim[i][0], tim[i][1]) };
-                        dequeOn.push_back(n);
+                        ev_push(note + i, sat(timeLength(tim[i][0], tim[i][1])));
                     }
                     if (f[i] == 4 && TIM5->CNT - tim_off[i][1] > windowReTRigger2) {
                         comp_set_data(i, comp[i][0]);
@@ -194,8 +189,8 @@ void g4() {
 }
 
 void check() {
-    if (!dequeOn.empty() && fl) {
-        const nt& x = dequeOn.front();
+    if (ev_r != ev_w && fl) {
+        const nt& x = ev_buf[ev_r % ev_size];
         uint32_t u = x.timelegth;
         tx_data[0] = x.note;
         tx_data[1] = (u & 0xff << 16) >> 16;
@@ -206,7 +201,7 @@ void check() {
         LL_USART_ClearFlag_TC(USART2);
         LL_TIM_ClearFlag_CC3(TIM8); // PWM - tim clk
         LL_TIM_EnableIT_CC3(TIM8);  // PWM - tim clk
-        dequeOn.pop_front();
+        ++ev_r;
         fl = 0;
     }
 }
@@ -234,7 +229,7 @@ void service() {
             flag_Service_command = 0;
         }
         if (service_commands == subcommand::exit) {
-            if (!dequeOn.empty()) dequeOn.clear();
+            ev_r = ev_w;
             for (int i = 0; i < 7; ++i) {
                 f[i] = 0;
                 comp_set_data(i, comp[i][0]);
@@ -247,7 +242,7 @@ void service() {
 }
 
 void resetData() {
-    // if (!dequeOn.empty()) dequeOn.clear(); // TODO нельзя это очищать из прерывания!!!
+    // TODO нельзя это очищать из прерывания!!! (очередь ev_buf)
     for (uint8_t i = 0; i < 7; ++i) {
         f[i] = 0;
         comp_ext_disable(i);
@@ -437,6 +432,17 @@ void USART2_IRQ() {
 void pause(const uint& p) { // TIM2 не обнуляем: он же метка времени замеров
     const uint32_t s = TIM2->CNT;
     while (TIM2->CNT - s < p) {}
+}
+
+uint32_t sat(const uint32_t t) {
+    return t > LEN_MAX ? LEN_MAX : t;
+}
+
+void ev_push(const uint8_t note, const uint32_t len) { // очередь полна — событие теряется (16 на 7 клавиш)
+    if ((uint8_t)(ev_w - ev_r) < ev_size) {
+        ev_buf[ev_w % ev_size] = { note, len };
+        ++ev_w;
+    }
 }
 
 uint32_t timeLength(const uint& t1, const uint& t2) {

@@ -107,6 +107,14 @@ extern "C" {
         uint32_t timelegth = 0;
     };
 
+    // очередь событий на шину (вместо std::deque): пишет и читает только основной цикл
+    const uint8_t ev_size = 16; // делитель 256
+    nt ev_buf[ev_size];
+    uint8_t ev_w = 0;
+    uint8_t ev_r = 0;
+
+    const uint32_t LEN_MAX = 0x7FFFFE; // насыщение поля времени (≈0.86 с), раньше старшие биты молча отрезались
+
     struct exti_prN {
         __IO uint32_t line = 0;
         __IO uint32_t* prX = nullptr;
@@ -168,6 +176,8 @@ extern "C" {
     void jump_off(const int& a, const uint32_t& t);
     void jump_on(const int& a, const uint32_t& t);
     void reg_init();
+    void ev_push(const uint8_t note, const uint32_t len);
+    uint32_t sat(const uint32_t t);
     // FlashPageInfo_t GetPageAndBank(uint32_t Address, uint32_t Size);
     // void Erase(uint32_t Page, uint32_t Banks);
     // void Flash_uint32(uint32_t Address, volatile uint32_t* Data, uint32_t size);
