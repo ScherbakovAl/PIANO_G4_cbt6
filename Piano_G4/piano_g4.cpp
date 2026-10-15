@@ -113,6 +113,9 @@ void g4() {
     if (chipAdress > 13) {
         while (1) {
             // off
+            if (need_reset) {
+                reset_all();
+            }
             for (uint8_t i = 0; i < 7; ++i) {
                 if (f[i] != 0) { // for note off
                     if (f[i] == 1) {
@@ -156,6 +159,9 @@ void g4() {
     else {
         while (1) {
             // on
+            if (need_reset) {
+                reset_all();
+            }
             for (uint8_t i = 0; i < 7; ++i) {
                 if (f[i] != 0) { // for note on
                     if (f[i] == 1) {
@@ -229,26 +235,36 @@ void service() {
             flag_Service_command = 0;
         }
         if (service_commands == subcommand::exit) {
-            ev_r = ev_w;
-            for (int i = 0; i < 7; ++i) {
-                f[i] = 0;
-                comp_set_data(i, comp[i][0]);
-                comp_ext_enable(i);
-            }
+            reset_all();
             service_flag = 0;
             USART2_Send(compN_, 0, (int)subcommand::stop_calibration);
         }
     }
 }
 
-void resetData() {
-    // TODO нельзя это очищать из прерывания!!! (очередь ev_buf)
+void resetData() { // из прерывания USART2: только глушим, автоматы и очередь сбросит основной цикл (reset_all)
     for (uint8_t i = 0; i < 7; ++i) {
-        f[i] = 0;
         comp_ext_disable(i);
-        comp_set_data(i, comp[i][0]);
-        comp_ext_enable(i);
     }
+    need_reset = 1;
+}
+
+// основной цикл: очередь пуста, все автоматы — в исходное состояние
+void reset_all() {
+    need_reset = 0;
+    ev_r = ev_w;
+    for (int i = 0; i < 7; ++i) {
+        comp_idle(i);
+    }
+}
+
+// исходное состояние автомата: ждём спада на green
+void comp_idle(const int i) {
+    comp_ext_disable(i);
+    f[i] = 0;
+    comp_set_data(i, comp[i][0]);
+    setCOMP_extVoltage_Down(i);
+    comp_ext_enable(i);
 }
 
 void comp_refresh(uint8_t& n) {
@@ -278,7 +294,8 @@ void communication() {
     if (rx_settings[0] == (uint8_t)command::set_comp_value) {
         comp[compN_][dot_] = convert8x2to16(a_, b_);
         USART2_Send(compN_, dot_, comp[compN_][dot_]);
-        f[compN_] = 0;
+        comp_ext_disable(compN_);
+        need_reset = 1; // новый порог вступит через comp_idle (с верным фронтом)
     }
 
     if (rx_settings[0] == (uint8_t)command::read_comp_setting) {

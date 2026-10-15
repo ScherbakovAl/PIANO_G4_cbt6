@@ -67,6 +67,7 @@ extern "C" {
     volatile int8_t f[7] = { 0 };
     volatile int fl = 1;
     volatile int flag_Service_command = 1;
+    volatile int need_reset = 0; // сброс автоматов просят из прерывания USART2, делает основной цикл
 
     enum class command {
         sync_timer = 1,
@@ -178,6 +179,8 @@ extern "C" {
     void reg_init();
     void ev_push(const uint8_t note, const uint32_t len);
     uint32_t sat(const uint32_t t);
+    void reset_all();
+    void comp_idle(const int i);
     // FlashPageInfo_t GetPageAndBank(uint32_t Address, uint32_t Size);
     // void Erase(uint32_t Page, uint32_t Banks);
     // void Flash_uint32(uint32_t Address, volatile uint32_t* Data, uint32_t size);
