@@ -51,6 +51,13 @@ extern "C" {
 
     volatile uint32_t tim[7][2] = { };
     uint32_t tim_off[7][2] = { };
+
+    // OFF: метки TIM2 спада на R и на G (подъём демпфера), подъём уже отправлен, последний опрос уровня (TIM5)
+    volatile uint32_t t_rdown[7] = { };
+    volatile uint32_t t_gdown[7] = { };
+    uint8_t lifted[7] = { };
+    uint8_t r_late[7] = { }; // R↓ поймана перевзводом (клавиша нажата во время сброса): момент неизвестен
+    uint32_t tim_poll[7] = { };
     int comp[7][3] = { };
     int comp_calibration[7] = { };
     int cc_fl[7] = { }; // флаг. Проверять состояние данного компаратора при калибровке или нет
@@ -114,7 +121,13 @@ extern "C" {
     uint8_t ev_w = 0;
     uint8_t ev_r = 0;
 
-    const uint32_t LEN_MAX = 0x7FFFFE; // насыщение поля времени (≈0.86 с), раньше старшие биты молча отрезались
+    // поле времени на шине (24 бита): бит 23 — подъём демпфера, младшие 23 — интервал в тиках TIM2
+    const uint32_t LEN_MAX = 0x7FFFFE;   // насыщение поля времени (≈0.86 с), раньше старшие биты молча отрезались
+    const uint32_t LEN_NONE = 0x7FFFFF;  // note-off без замера скорости
+    const uint32_t LIFT_FLAG = 0x800000; // подъём демпфера; младшие биты — интервал R↓→G↓ (0 = не замерен)
+#define SEND_LIFT 0                       // 1 — только вместе с send_damper_lift = true в H7
+    const uint32_t OFF_POLL = 5;          // TIM5 (p100us) = 0.5 мс: опрос уровня, пока клавиша между R и G
+    const uint32_t OFF_LIFT_WAIT = 150;   // TIM5 (p100us) = 15 мс: ниже R, но не до G — подъём без скорости
 
     struct exti_prN {
         __IO uint32_t line = 0;
@@ -181,6 +194,11 @@ extern "C" {
     uint32_t sat(const uint32_t t);
     void reset_all();
     void comp_idle(const int i);
+    void off_step(const uint8_t i, const uint8_t n);
+    void rearm(const int i, const int dac, const bool rising, const int8_t wait);
+    bool level_past(const int i, const int dac, const bool rising);
+    void comp_preset(const int i, const int dac, const bool rising);
+    void settle();
     // FlashPageInfo_t GetPageAndBank(uint32_t Address, uint32_t Size);
     // void Erase(uint32_t Page, uint32_t Banks);
     // void Flash_uint32(uint32_t Address, volatile uint32_t* Data, uint32_t size);

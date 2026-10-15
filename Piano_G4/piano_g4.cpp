@@ -98,10 +98,8 @@ void g4() {
 // TIM2 - presc = 12    - 100ns период
 // TIM5 - presc = 13599 - 100us период
 
-    if (chipAdress > 13) {
-        // set_ALL_COMP_extVoltage_Up(); // для ship OFF
-        windowReTRigger1 = 10 * 60; // = 60ms // TIM5 (p100us) // TODO провериь бОльшие значения
-        windowReTRigger2 = 10 * 60; // = 60ms // TIM5 (p100us)
+    if (chipAdress > 13) { // ship OFF
+        reset_all(); // ждём R↓ (подъём демпфера), а не green
     }
     else { // ship ON
         windowReTRigger1 = 10 * 30; // = 30ms // TIM5 (p100us)
@@ -117,40 +115,7 @@ void g4() {
                 reset_all();
             }
             for (uint8_t i = 0; i < 7; ++i) {
-                if (f[i] != 0) { // for note off
-                    if (f[i] == 1) {
-                        setCOMP_extVoltage_Up(i);
-                        comp_set_data(i, comp[i][0]);
-                        f[i] = 2;
-                        comp_ext_enable(i);
-                    }
-                    if (f[i] == 3) {
-                        tim_off[i][0] = TIM5->CNT;
-                        comp_set_data(i, comp[i][1]);
-                        f[i] = 4;
-                        comp_ext_enable(i);
-
-                    }
-                     // TODO видимо эту    vvvvv    секцию надо удалить      vvvvv
-                    // if (f[i] == 4 && TIM5->CNT - tim_off[i][0] > windowReTRigger1) {
-                    //     comp_ext_disable(i);
-                    //     comp_set_data(i, comp[i][2]); // ?
-                    //     setCOMP_extVoltage_Down(i); // ?
-                    //     f[i] = 0; // ?
-                    //     comp_ext_enable(i);
-                    // }
-                    if (f[i] == 5) {
-                        tim_off[i][1] = TIM5->CNT;
-                        f[i] = 6;
-                        ev_push(note + i, sat(timeLength(tim[i][0], tim[i][1])));
-                    }
-                    if (f[i] == 6 && TIM5->CNT - tim_off[i][1] > windowReTRigger2) {
-                        comp_set_data(i, comp[i][2]);
-                        setCOMP_extVoltage_Down(i);
-                        f[i] = 0;
-                        comp_ext_enable(i);
-                    }
-                }
+                off_step(i, note + i);
             }
             check();
             service();
@@ -258,8 +223,14 @@ void reset_all() {
     }
 }
 
-// исходное состояние автомата: ждём спада на green
+// исходное состояние автомата: ON — ждём спада на green, OFF — спада на R (подъём демпфера)
 void comp_idle(const int i) {
+    if (chipAdress > 13) {
+        lifted[i] = 0;
+        rearm(i, comp[i][1], false, 0);
+        r_late[i] = f[i] != 0;
+        return;
+    }
     comp_ext_disable(i);
     f[i] = 0;
     comp_set_data(i, comp[i][0]);
@@ -599,18 +570,119 @@ void COMP7_IRQ(void) { // line 33
     }
 }
 
-void jump_off(const int& a, const uint32_t& t) {
-    if (f[a] == 0) {
+void jump_off(const int& a, const uint32_t& t) { // OFF: чётное f — ждём фронт, нечётное — фронт был (шаг в off_step)
+    if (f[a] == 0) {      // R↓: демпфер пошёл со струн
         f[a] = 1;
+        t_rdown[a] = t;
     }
-    if (f[a] == 2) {
+    else if (f[a] == 2) { // G↓: клавиша внизу
         f[a] = 3;
+        t_gdown[a] = t;
+    }
+    else if (f[a] == 4) { // G↑: клавиша пошла вверх
+        f[a] = 5;
         tim[a][0] = t;
     }
-    if (f[a] == 4) {
-        f[a] = 5;
+    else if (f[a] == 6) { // R↑: демпфер лёг
+        f[a] = 7;
         tim[a][1] = t;
     }
+}
+
+// Автомат OFF-датчика. Сигнал растёт к покою (демпфер на струнах): G = comp[i][0] < R = comp[i][1].
+// Подъём демпфера: R↓ → G↓ (скорость — интервал R↓→G↓). Опускание: G↑ (t0) → R↑ (t1) — note-off со скоростью t1−t0.
+// Ниже R, но за OFF_LIFT_WAIT не дошла до G — подъём без скорости; вернулась выше R раньше — помеха, молчим
+// (так же гасится дребезг посадки демпфера). Пока клавиша между R и G, раз в OFF_POLL проверяется второй порог.
+void off_step(const uint8_t i, const uint8_t n) {
+    const uint32_t now = TIM5->CNT;
+    switch (f[i]) {
+    case 1: // R↓
+        tim_off[i][0] = now;
+        tim_poll[i] = now;
+        rearm(i, comp[i][0], false, 2);
+        break;
+    case 2: // ждём G↓; не вернулась ли выше R?
+        if (now - tim_poll[i] < OFF_POLL) break;
+        tim_poll[i] = now;
+        if (level_past(i, comp[i][1], true)) {
+            if (lifted[i]) ev_push(n, LEN_NONE); // неглубокое нажатие отпущено: демпфер лёг, скорость не замерить
+            comp_idle(i);
+            break;
+        }
+        if (!lifted[i] && now - tim_off[i][0] > OFF_LIFT_WAIT) {
+            lifted[i] = 1;
+            if (SEND_LIFT) ev_push(n, LIFT_FLAG);
+        }
+        rearm(i, comp[i][0], false, 2);
+        break;
+    case 3: // G↓
+        if (!lifted[i]) {
+            lifted[i] = 1;
+            const uint32_t len = sat(timeLength(t_rdown[i], t_gdown[i]));
+            if (SEND_LIFT) ev_push(n, LIFT_FLAG | (r_late[i] ? 0 : (len ? len : 1)));
+        }
+        rearm(i, comp[i][0], true, 4);
+        break;
+    case 5: // G↑, t0 в tim[i][0]
+        tim_poll[i] = now;
+        rearm(i, comp[i][1], true, 6);
+        break;
+    case 6: // ждём R↑; не вернулась ли ниже G (дребезг у дна, повтор без посадки демпфера)?
+        if (now - tim_poll[i] < OFF_POLL) break;
+        tim_poll[i] = now;
+        if (level_past(i, comp[i][0], false)) {
+            rearm(i, comp[i][0], true, 4); // снова внизу: t0 даст следующий G↑
+        }
+        else {
+            rearm(i, comp[i][1], true, 6);
+        }
+        break;
+    case 7: // R↑
+        ev_push(n, sat(timeLength(tim[i][0], tim[i][1])));
+        comp_idle(i);
+        break;
+    }
+}
+
+// Перевзвод на порог dac (фронт rising или спад), ожидание в состоянии wait. Если сигнал уже за
+// порогом (фронт прошёл, пока EXTI был выключен), шаг делается сразу — как из прерывания.
+void rearm(const int i, const int dac, const bool rising, const int8_t wait) {
+    comp_ext_disable(i);
+    f[i] = wait;
+    comp_preset(i, dac, rising);
+    if (rising) setCOMP_extVoltage_Up(i); // и сброс ложного фронта от скачка ЦАП
+    else setCOMP_extVoltage_Down(i);
+    comp_ext_enable(i);
+    __disable_irq();
+    const bool high = LL_COMP_ReadOutputLevel(comp_def(i)) == LL_COMP_OUTPUT_LEVEL_HIGH;
+    if (f[i] == wait && high == rising) {
+        comp_ext_disable(i);
+        const uint32_t t = TIM2->CNT;
+        jump_func(i, t);
+    }
+    __enable_irq();
+}
+
+// Сигнал уже за порогом dac в сторону фронта (rising — выше, иначе ниже; с запасом в гистерезис)?
+// EXTI остаётся выключенным — дальше rearm или comp_idle.
+bool level_past(const int i, const int dac, const bool rising) {
+    comp_ext_disable(i);
+    comp_preset(i, dac, rising);
+    return (LL_COMP_ReadOutputLevel(comp_def(i)) == LL_COMP_OUTPUT_LEVEL_HIGH) == rising;
+}
+
+// ЦАП в край (выход компаратора — «до фронта», гистерезис в известном состоянии), затем порог dac
+void comp_preset(const int i, const int dac, const bool rising) {
+    comp_set_data(i, rising ? 4095 : 0);
+    settle();
+    comp_set_data(i, dac);
+    settle();
+}
+
+// установка ЦАП + компаратора после смены порога: 30 тиков TIM2 ≈ 3 мкс
+void settle() {
+    const uint32_t s = TIM2->CNT;
+    while (TIM2->CNT - s < 30) {}
 }
 
 void jump_on(const int& a, const uint32_t& t) {
