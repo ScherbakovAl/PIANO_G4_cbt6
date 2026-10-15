@@ -125,7 +125,7 @@ extern "C" {
     const uint32_t LEN_MAX = 0x7FFFFE;   // насыщение поля времени (≈0.86 с), раньше старшие биты молча отрезались
     const uint32_t LEN_NONE = 0x7FFFFF;  // note-off без замера скорости
     const uint32_t LIFT_FLAG = 0x800000; // подъём демпфера; младшие биты — интервал R↓→G↓ (0 = не замерен)
-#define SEND_LIFT 0                       // 1 — только вместе с send_damper_lift = true в H7
+#define SEND_LIFT 1                       // 1 — только вместе с send_damper_lift = true в H7
     const uint32_t OFF_POLL = 5;          // TIM5 (p100us) = 0.5 мс: опрос уровня, пока клавиша между R и G
     const uint32_t OFF_LIFT_WAIT = 150;   // TIM5 (p100us) = 15 мс: ниже R, но не до G — подъём без скорости
 
