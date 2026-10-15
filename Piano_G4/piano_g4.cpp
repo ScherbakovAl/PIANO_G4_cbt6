@@ -434,9 +434,9 @@ void USART2_IRQ() {
 }
 
 // (100ns)
-void pause(const uint& p) {
-    TIM2->CNT = 0;
-    while (TIM2->CNT < p) {}
+void pause(const uint& p) { // TIM2 не обнуляем: он же метка времени замеров
+    const uint32_t s = TIM2->CNT;
+    while (TIM2->CNT - s < p) {}
 }
 
 uint32_t timeLength(const uint& t1, const uint& t2) {
