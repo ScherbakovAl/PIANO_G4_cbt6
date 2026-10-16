@@ -8,6 +8,8 @@ const uint32_t bin_data_32_length = sizeof(bin_data_32); // 2 kB
 static const uint32_t ADRESS_CHIP_NUMBER = 0x08004800; // здесь храним номер чипа
 static const uint32_t MAIN_FIRMWARE = 0x08008000; // здесь основная прошивка
 static volatile uint32_t ADRESS_FOR_JUMP = 0; // указать куда прыгнуть
+extern "C" uint32_t g_pfnVectors[]; // начало этого загрузчика (startup): 0x08000000 у v1, 0x08002000 у v2
+static const uint32_t BOOTLOADER_SIZE = 0x2000; // 4 страницы — LENGTH в STM32G474XX_FLASH.ld
 
 // settings
 __attribute__((aligned(8))) uint8_t tx_s[5] = { };
@@ -130,6 +132,15 @@ void From_H7_to_array_g4() {
     USART2_Send_responce(response::ok);
 }
 
+// Страницу можно стереть и записать: не этот загрузчик и не номер чипа (иначе — только SWD)
+static bool address_allowed(const uint32_t addr) {
+    const uint32_t self = (uint32_t)g_pfnVectors;
+    return addr % bin_data_32_length == 0
+        && addr >= FLASH_BASE && addr + bin_data_32_length <= FLASH_BASE + FLASH_SIZE
+        && (addr + bin_data_32_length <= self || addr >= self + BOOTLOADER_SIZE)
+        && addr != ADRESS_CHIP_NUMBER;
+}
+
 void Copy_array_to_flash() {
 
     Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает 0x15 0x61 0x62 0x63 0x64
@@ -143,17 +154,23 @@ void Copy_array_to_flash() {
 
 
     // 2 послать адрес в ответ на проверку
-    Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает форматированным адресом
+    const uint32_t addr = bytes_to_uint32_pointer(rx_s);
+    const bool allowed = address_allowed(addr);
+    if (allowed) {
+        Set_tx_s(rx_s[0], rx_s[1], rx_s[2], rx_s[3], rx_s[4]); // отвечает форматированным адресом
+    }
+    else {
+        Set_tx_s(0xFF, 0xFF, 0xFF, 0xFF, rx_s[4]); // чужой адрес в ответ: H7 пришлёт fail, страница не стирается
+    }
     USART2_Send_settings();
     // const uint32_t addr_raw = bytes_to_uint32_pointer(&rx_s[1]);
-    const uint32_t addr = bytes_to_uint32_pointer(rx_s);
 
 
     // 3 если ок, то записываем в память..
     USART2_Receive_settings();
 
     int bug = 0;
-    if (rx_s[0] == (uint8_t)response::ok) {
+    if (allowed && rx_s[0] == (uint8_t)response::ok) {
 
         FlashPageInfo_t info = GetPageAndBank(addr, bin_data_32_length);
         Erase(info.start_page, info.bank);
