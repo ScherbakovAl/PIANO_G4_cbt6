@@ -443,15 +443,10 @@ void ev_push(const uint8_t note, const uint32_t len) { // очередь пол�
     }
 }
 
+// переход TIM2 через 0 учтён сам: беззнаковое вычитание идёт по модулю 2^32.
+// Верно, только пока у TIM2 ARR = 0xFFFFFFFF (tim.c, CubeMX) — иначе интервал через 0 будет неверным!
 uint32_t timeLength(const uint& t1, const uint& t2) {
-    uint32_t tOut;
-    if (t1 > t2) {
-        tOut = (4'294'967'295 - t1) + t2 + 1;
-    }
-    else {
-        tOut = t2 - t1;
-    }
-    return tOut;
+    return t2 - t1;
 }
 
 int convert8x2to16(const uint8_t& a, const uint8_t& b) {
