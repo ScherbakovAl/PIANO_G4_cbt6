@@ -218,6 +218,12 @@ void resetData() { // из прерывания USART2: только глуши�
 void reset_all() {
     need_reset = 0;
     ev_r = ev_w;
+    __disable_irq();
+    if (!fl && !LL_DMA_IsEnabledChannel(DMA1, LL_DMA_CHANNEL_1)) { // событие ждёт слота на шине — тоже устарело
+        LL_TIM_DisableIT_CC3(TIM8);
+        fl = 1;
+    }
+    __enable_irq();
     for (int i = 0; i < 7; ++i) {
         comp_idle(i);
     }
@@ -357,6 +363,9 @@ void unmute() {
 
 // UART Send-Recive
 void USART2_Send(const uint8_t& compN, const uint8_t& dot, const int& value) {
+    // TC ждём сами. Из основного цикла (старт g4(), выход из калибровки) прерывание TC (USART2_IRQ — конец
+    // передачи события) успевало сбросить TC раньше ожидания ниже — вечный цикл, основной цикл чипа вставал.
+    LL_USART_DisableIT_TC(USART2);
     LL_USART_EnableDirectionTx(USART2); // отправлять только при ВЫКЛюченных остальных слэйв-трансляторах.. иначе замыкание
     conv16to8x2 c;
     c = convert16to8x2(value);
@@ -373,6 +382,7 @@ void USART2_Send(const uint8_t& compN, const uint8_t& dot, const int& value) {
     while (!LL_USART_IsActiveFlag_TC(USART2)) {}
     LL_USART_DisableDirectionTx(USART2);
     LL_USART_ClearFlag_TC(USART2);
+    LL_USART_EnableIT_TC(USART2);
 }
 
 void USART2_Receive() {
