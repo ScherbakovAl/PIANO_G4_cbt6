@@ -244,7 +244,7 @@ void TIM8_CC_IRQHandler(void)
 void COMP1_2_3_IRQHandler(void)
 {
   /* USER CODE BEGIN COMP1_2_3_IRQn 0 */
-  COMP1_2_3_IRQ();
+  // выключено в cap_init(): метки компараторов пишет захват таймера
   /* USER CODE END COMP1_2_3_IRQn 0 */
   /* USER CODE BEGIN COMP1_2_3_IRQn 1 */
 
@@ -257,7 +257,7 @@ void COMP1_2_3_IRQHandler(void)
 void COMP4_5_6_IRQHandler(void)
 {
   /* USER CODE BEGIN COMP4_5_6_IRQn 0 */
-  COMP4_5_6_IRQ();
+  // выключено в cap_init(): метки компараторов пишет захват таймера
   /* USER CODE END COMP4_5_6_IRQn 0 */
   /* USER CODE BEGIN COMP4_5_6_IRQn 1 */
 
@@ -270,7 +270,7 @@ void COMP4_5_6_IRQHandler(void)
 void COMP7_IRQHandler(void)
 {
   /* USER CODE BEGIN COMP7_IRQn 0 */
-  COMP7_IRQ();
+  // выключено в cap_init(): метки компараторов пишет захват таймера
   /* USER CODE END COMP7_IRQn 0 */
   /* USER CODE BEGIN COMP7_IRQn 1 */
 

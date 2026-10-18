@@ -49,15 +49,44 @@ extern "C" {
     uint32_t windowReTRigger1 = 0;
     uint32_t windowReTRigger2 = 0;
 
-    volatile uint32_t tim[7][2] = { };
-    uint32_t tim_off[7][2] = { };
+    uint32_t tim[7][2] = { }; // метки: ON — G↓ и R↓, OFF — G↑ и R↑
 
-    // OFF: метки TIM2 спада на R и на G (подъём демпфера), подъём уже отправлен, последний опрос уровня (TIM5)
-    volatile uint32_t t_rdown[7] = { };
-    volatile uint32_t t_gdown[7] = { };
+    // OFF: метка спада на R (подъём демпфера), подъём уже отправлен, последний опрос уровня
+    uint32_t t_rdown[7] = { };
     uint8_t lifted[7] = { };
     uint8_t r_late[7] = { }; // R↓ поймана перевзводом (клавиша нажата во время сброса): момент неизвестен
     uint32_t tim_poll[7] = { };
+
+    // Метки пишет таймер: выход компаратора заведён на вход захвата (TISEL), без EXTI и прерываний.
+    // Все таймеры — PSC 0, тик 1/136 МГц ≈ 7.35 нс. Интервал — внутри одной клавиши, т.е. одного таймера.
+    // TIM3 16-битный: метку клавиши 2 достраивает до 32 бит take() по TIM2 — её надо забрать за 2^16 тиков (482 мкс).
+    struct cap_ch {
+        TIM_TypeDef* tim;
+        uint32_t ch; // LL_TIM_CHANNEL_CHx — он же бит CCxE
+        uint32_t n;  // 1..4: CCxIF = 1 << n, CCxOF = 1 << (n + 8), CCRx = (&CCR1)[n - 1]
+    };
+    const cap_ch cap[7] = {
+        { TIM2, LL_TIM_CHANNEL_CH4, 4 }, // COMP1
+        { TIM5, LL_TIM_CHANNEL_CH2, 2 }, // COMP2
+        { TIM3, LL_TIM_CHANNEL_CH1, 1 }, // COMP3
+        { TIM2, LL_TIM_CHANNEL_CH3, 3 }, // COMP4
+        { TIM2, LL_TIM_CHANNEL_CH1, 1 }, // COMP5
+        { TIM2, LL_TIM_CHANNEL_CH2, 2 }, // COMP6
+        { TIM5, LL_TIM_CHANNEL_CH1, 1 }, // COMP7
+    };
+    uint16_t k3 = 0; // TIM2 − TIM3 (младшие 16 бит), замер при старте
+
+    // Взвод канала без ожидания на месте: arm() пишет ЦАП и уходит, шаги делает arm_busy() из основного цикла.
+    // arm_step: 0 — свободен; 1 — ЦАП в краю, ждём SETTLE; 2 — ЦАП на пороге, ждём SETTLE.
+    uint8_t arm_step[7] = { };
+    uint32_t arm_t[7] = { };     // момент последней записи в ЦАП (TIM2)
+    int arm_dac[7] = { };
+    uint8_t arm_rise[7] = { };
+    uint8_t arm_check[7] = { };  // по окончании: сигнал уже за порогом — событие «опоздало»
+    uint8_t arm_probe[7] = { };  // не взвод, а проба уровня: захват не включается, ответ в probe_res
+    uint8_t probe_res[7] = { };
+    uint8_t late[7] = { };       // опоздавшее событие ждёт take(); метка — момент проверки (t_late)
+    uint32_t t_late[7] = { };
     int comp[7][3] = { };
     int comp_calibration[7] = { };
     int cc_fl[7] = { }; // флаг. Проверять состояние данного компаратора при калибровке или нет
@@ -71,10 +100,11 @@ extern "C" {
     };
     struct default_comp def_comp;
 
-    volatile int8_t f[7] = { 0 };
+    int8_t f[7] = { 0 }; // состояние автомата клавиши; только основной цикл
     volatile int fl = 1;
     volatile int flag_Service_command = 1;
     volatile int need_reset = 0; // сброс автоматов просят из прерывания USART2, делает основной цикл
+    volatile int muted = 0;      // mute с H7: автоматы стоят, захват выключен
 
     enum class command {
         sync_timer = 1,
@@ -121,21 +151,18 @@ extern "C" {
     uint8_t ev_w = 0;
     uint8_t ev_r = 0;
 
-    // поле времени на шине (24 бита): бит 23 — подъём демпфера, младшие 23 — интервал в тиках TIM2
-    const uint32_t LEN_MAX = 0x7FFFFE;   // насыщение поля времени (≈0.86 с), раньше старшие биты молча отрезались
+    // поле времени на шине (24 бита): бит 23 — подъём демпфера, младшие 23 — интервал в тиках таймера
+    const uint32_t LEN_MAX = 0x7FFFFE;   // насыщение поля времени (≈61.7 мс при тике 7.35 нс), раньше старшие биты молча отрезались
     const uint32_t LEN_NONE = 0x7FFFFF;  // note-off без замера скорости
     const uint32_t LIFT_FLAG = 0x800000; // подъём демпфера; младшие биты — интервал R↓→G↓ (0 = не замерен)
 #define SEND_LIFT 1                       // 1 — только вместе с send_damper_lift = true в H7
-    const uint32_t OFF_POLL = 5;          // TIM5 (p100us) = 0.5 мс: опрос уровня, пока клавиша между R и G
-    const uint32_t OFF_LIFT_WAIT = 150;   // TIM5 (p100us) = 15 мс: ниже R, но не до G — подъём без скорости
+    const uint32_t TICK_US = 136;                 // тиков TIM2/TIM3/TIM5 в микросекунде (PSC 0)
+    const uint32_t TICK_OLD = 14;                 // тиков в прежнем тике TIM2 (PSC 13, 102.9 нс) — H7 делит на столько же
+    const uint32_t SETTLE = 3 * TICK_US;          // установление ЦАП + компаратора после смены порога
+    const uint32_t OFF_POLL = 500 * TICK_US;      // 0.5 мс: опрос уровня, пока клавиша между R и G
+    const uint32_t OFF_LIFT_WAIT = 15000 * TICK_US; // 15 мс: ниже R, но не до G — подъём без скорости
 
-    struct exti_prN {
-        __IO uint32_t line = 0;
-        __IO uint32_t* prX = nullptr;
-        __IO uint32_t* imrX = nullptr;
-        __IO uint32_t* emrX = nullptr;
-        __IO uint32_t* ftsrX = nullptr;
-        __IO uint32_t* rtsrX = nullptr;
+    struct dac_reg {
         __IO uint32_t* pregSet = nullptr;
         __IO uint32_t* pregRead = nullptr;
     };
@@ -153,7 +180,7 @@ extern "C" {
     //     fail = 0xDD
     // };
 
-    exti_prN reg_flags[7];
+    dac_reg dac_regs[7];
 
     subcommand service_commands = subcommand::working;
     int service_flag = 0;
@@ -174,31 +201,25 @@ extern "C" {
     void pause(const uint& p);
     int convert8x2to16(const uint8_t& a, const uint8_t& b);
     conv16to8x2 convert16to8x2(const int& a);
-    void setCOMP_extVoltage_Up(const int& compN);
-    void setCOMP_extVoltage_Down(const int& compN);
-    void set_ALL_COMP_extVoltage_Up();
-    void set_ALL_COMP_extVoltage_Down();
-    void comp_ext_enable(const int& compN);
-    void comp_ext_disable(const int& compN);
     void comp_set_data(const int& compN, const int& data);
     uint32_t comp_read_data(const int& compN);
-    void COMP1_2_3_IRQ();
-    void COMP4_5_6_IRQ();
-    void COMP7_IRQ();
     COMP_TypeDef* comp_def(const int& i);
     void Read_uint32(uint32_t Address, volatile uint32_t* pData, uint32_t Size);
-    void jump_off(const int& a, const uint32_t& t);
-    void jump_on(const int& a, const uint32_t& t);
     void reg_init();
+    void cap_init();
+    void cap_set(const int i, const bool on, const bool rising);
+    void cap_off(const int i);
+    uint8_t take(const int i, uint32_t& t);
     void ev_push(const uint8_t note, const uint32_t len);
     uint32_t sat(const uint32_t t);
     void reset_all();
     void comp_idle(const int i);
+    void on_step(const uint8_t i, const uint8_t n);
     void off_step(const uint8_t i, const uint8_t n);
-    void rearm(const int i, const int dac, const bool rising, const int8_t wait);
-    bool level_past(const int i, const int dac, const bool rising);
-    void comp_preset(const int i, const int dac, const bool rising);
-    void settle();
+    void arm(const int i, const int dac, const bool rising, const int8_t wait, const bool preset, const bool check);
+    void probe(const int i, const int dac, const bool rising, const int8_t wait);
+    bool arm_busy(const int i);
+    bool past(const int i, const bool rising);
     // FlashPageInfo_t GetPageAndBank(uint32_t Address, uint32_t Size);
     // void Erase(uint32_t Page, uint32_t Banks);
     // void Flash_uint32(uint32_t Address, volatile uint32_t* Data, uint32_t size);
