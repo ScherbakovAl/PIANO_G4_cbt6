@@ -37,9 +37,10 @@ used to play on a real instrument.
 - **Optical sensing with on-chip comparators:** uses the STM32G4's analog
   comparators (7 per chip) to detect when a hammer crosses each optical
   sensor's threshold.
-- **Hammer-flight timing:** high-resolution timers (100 ns / ~100 µs scales)
-  measure the time the hammer takes between sensor points, which encodes how
-  hard the key was struck.
+- **Hammer-flight timing:** each comparator output is routed inside the chip
+  to a timer input capture (TIM2/TIM3/TIM5, 7.35 ns tick), so the timer itself
+  latches the moment the hammer crosses a sensor point — no interrupts, no
+  jitter. The time between points encodes how hard the key was struck.
 - **Note ON / OFF detection:** each board carries an address; addresses 1–13
   handle note-on sensors, 14–26 handle note-off (key release) sensors.
 - **Multidrop UART link:** reports note timings to the PIANO_H7 controller and
@@ -130,9 +131,10 @@ MIDI-пианино с оптическим считыванием нажати�
 - **Оптическое считывание встроенными компараторами:** использует аналоговые
   компараторы STM32G4 (по 7 на чип) для детектирования момента, когда
   молоточек пересекает порог оптического датчика.
-- **Замер времени пролёта молоточка:** таймеры высокого разрешения (масштабы
-  100 нс / ~100 мкс) измеряют время прохождения молоточка между точками
-  сенсоров — это и кодирует силу удара по клавише.
+- **Замер времени пролёта молоточка:** выход каждого компаратора внутри чипа
+  заведён на вход захвата таймера (TIM2/TIM3/TIM5, тик 7.35 нс), и момент, когда
+  молоточек пересекает точку сенсора, фиксирует сам таймер — без прерываний и
+  джиттера. Время между точками и кодирует силу удара по клавише.
 - **Детектирование note ON / OFF:** каждая плата имеет адрес; адреса 1–13
   обрабатывают датчики note-on, 14–26 — датчики note-off (отпускание клавиши).
 - **Многоточечная шина UART:** передаёт тайминги нот контроллеру PIANO_H7 и

@@ -11,9 +11,6 @@
 // static const uint32_t ADRESS_CHIP_NUMBER_older = 0x08003800;
 static const uint32_t ADRESS_CHIP_NUMBER = 0x08004800; // здесь храним номер чипа
 
-using JumpFuncPtr = void(*)(const int& a, const uint32_t& t); // подмена функции jump_func на jump_on или jump_off
-JumpFuncPtr jump_func = nullptr;
-
 // main
 void g4() {
     Read_uint32(ADRESS_CHIP_NUMBER, &chipAdress, 4);
@@ -28,21 +25,19 @@ void g4() {
     tx_settings[0] = chipAdress;
     rx_settings[0] = chipAdress;
 
-
-    if (chipAdress > 13) { // выбор функции для прыжка для on или off
-        jump_func = jump_off;
-    }
-    else {
-        jump_func = jump_on;
-    }
-
     reg_init();
+    cap_init();
 
     GPIOB->BSRR = 0x80; // pB7 // tim interrupter // чтобы включился счёт таймера с H7
 
-    // TIM init
-    LL_TIM_EnableCounter(TIM2);               // основной счётчик (100nS)
-    LL_TIM_EnableCounter(TIM5);               // доп счётчик (p100uS)
+    // TIM init. TIM2 — первым: TIM5 и TIM3 отстают от него на пару тиков, и «TIM2->CNT − метка» в окнах
+    // автоматов не бывает отрицательной (иначе — огромное беззнаковое и мгновенный таймаут)
+    LL_TIM_EnableCounter(TIM2); // метки клавиш 0, 3, 4, 5 и «сейчас» для окон и пауз
+    LL_TIM_EnableCounter(TIM5); // метки клавиш 1, 6
+    LL_TIM_EnableCounter(TIM3); // метка клавиши 2 (16 бит)
+    const uint32_t c2 = TIM2->CNT; // сначала TIM2: замер k3 не больше истинного — take() не уйдёт в «отрицательный» возраст
+    const uint32_t c3 = TIM3->CNT;
+    k3 = c2 - c3;
     LL_TIM_SetAutoReload(TIM8, allChipCount); // PWM - tim clk
     LL_TIM_OC_SetCompareCH3(TIM8, chipAdress);
     LL_TIM_EnableCounter(TIM8); // PWM - tim clk
@@ -95,16 +90,13 @@ void g4() {
 // можно для неполных сделать точку срабатывания высоко, выше 1000 и не будет компаратор срабатывать..
 
 // 136Mhz - speed cheep
-// TIM2 - presc = 12    - 100ns период
-// TIM5 - presc = 13599 - 100us период
+// TIM2, TIM3, TIM5 - presc = 0 - 7.35ns период
 
-    if (chipAdress > 13) { // ship OFF
-        reset_all(); // ждём R↓ (подъём демпфера), а не green
+    if (chipAdress <= 13) { // ship ON
+        windowReTRigger1 = 30000 * TICK_US; // = 30ms
+        windowReTRigger2 = 50000 * TICK_US; // = 50ms
     }
-    else { // ship ON
-        windowReTRigger1 = 10 * 30; // = 30ms // TIM5 (p100us)
-        windowReTRigger2 = 10 * 50; // = 50ms // TIM5 (p100us)
-    }
+    reset_all(); // взвод: ON ждёт G↓, OFF — R↓ (подъём демпфера)
 
     USART2_Send(compN_, dot_, 0);
 
@@ -114,8 +106,10 @@ void g4() {
             if (need_reset) {
                 reset_all();
             }
-            for (uint8_t i = 0; i < 7; ++i) {
-                off_step(i, note + i);
+            if (!muted) {
+                for (uint8_t i = 0; i < 7; ++i) {
+                    off_step(i, note + i);
+                }
             }
             check();
             service();
@@ -127,30 +121,9 @@ void g4() {
             if (need_reset) {
                 reset_all();
             }
-            for (uint8_t i = 0; i < 7; ++i) {
-                if (f[i] != 0) { // for note on
-                    if (f[i] == 1) {
-                        tim_off[i][0] = TIM5->CNT; // TIM5 (p100us)
-                        comp_set_data(i, comp[i][1]);
-                        f[i] = 2;
-                        comp_ext_enable(i);
-                    }
-                    if (f[i] == 2 && TIM5->CNT - tim_off[i][0] > windowReTRigger1) {
-                        comp_ext_disable(i);
-                        comp_set_data(i, comp[i][0]);
-                        f[i] = 0;
-                        comp_ext_enable(i);
-                    }
-                    if (f[i] == 3) {
-                        tim_off[i][1] = TIM5->CNT;
-                        f[i] = 4;
-                        ev_push(note + i, sat(timeLength(tim[i][0], tim[i][1])));
-                    }
-                    if (f[i] == 4 && TIM5->CNT - tim_off[i][1] > windowReTRigger2) {
-                        comp_set_data(i, comp[i][0]);
-                        f[i] = 0;
-                        comp_ext_enable(i);
-                    }
+            if (!muted) {
+                for (uint8_t i = 0; i < 7; ++i) {
+                    on_step(i, note + i);
                 }
             }
             check();
@@ -209,7 +182,7 @@ void service() {
 
 void resetData() { // из прерывания USART2: только глушим, автоматы и очередь сбросит основной цикл (reset_all)
     for (uint8_t i = 0; i < 7; ++i) {
-        comp_ext_disable(i);
+        cap_off(i);
     }
     need_reset = 1;
 }
@@ -233,21 +206,10 @@ void reset_all() {
 void comp_idle(const int i) {
     if (chipAdress > 13) {
         lifted[i] = 0;
-        rearm(i, comp[i][1], false, 0);
-        r_late[i] = f[i] != 0;
+        arm(i, comp[i][1], false, 0, true, true); // R уже внизу — опоздавший R↓, r_late
         return;
     }
-    comp_ext_disable(i);
-    f[i] = 0;
-    comp_set_data(i, comp[i][0]);
-    setCOMP_extVoltage_Down(i);
-    comp_ext_enable(i);
-}
-
-void comp_refresh(uint8_t& n) {
-    comp_ext_disable(n);
-    comp_set_data(n, comp[n][0]);
-    comp_ext_enable(n);
+    arm(i, comp[i][0], false, 0, false, false);
 }
 
 void communication() {
@@ -271,7 +233,7 @@ void communication() {
     if (rx_settings[0] == (uint8_t)command::set_comp_value) {
         comp[compN_][dot_] = convert8x2to16(a_, b_);
         USART2_Send(compN_, dot_, comp[compN_][dot_]);
-        comp_ext_disable(compN_);
+        cap_off(compN_);
         need_reset = 1; // новый порог вступит через comp_idle (с верным фронтом)
     }
 
@@ -305,10 +267,9 @@ void communication() {
 }
 
 // Calibrations
-void calibration() {
-    comp_ext_disable(compN_);
+void calibration() { // следом communication() зовёт resetData(): автомат перевзведёт основной цикл
+    cap_off(compN_);
     comp_set_data(compN_, 0);
-    f[compN_] = 0;
     for (int a = 0; a < 4092; ++a) {
         comp_set_data(compN_, a);
         if (LL_COMP_ReadOutputLevel(comp_def(compN_)) == LL_COMP_OUTPUT_LEVEL_LOW) {
@@ -320,16 +281,13 @@ void calibration() {
             break;
         }
     }
-    f[compN_] = 0;
     comp_set_data(compN_, comp[compN_][0]);
-    comp_ext_enable(compN_);
 }
 
 void all_calibration() {
     if (b_ == (uint8_t)subcommand::start_calibration) {
-        for (int i = 0; i < 7; ++i) {
-            f[i] = 0;
-            comp_ext_disable(i);
+        for (int i = 0; i < 7; ++i) { // основной цикл уйдёт в service(), на выходе — reset_all()
+            cap_off(i);
         }
         service_commands = subcommand::working;
         service_flag = 1;
@@ -350,15 +308,15 @@ void all_calibration() {
 }
 
 void mute() {
+    muted = 1;
     for (int a = 0; a < 7; ++a) {
-        comp_ext_disable(a);
+        cap_off(a);
     }
 }
 
-void unmute() {
-    for (int a = 0; a < 7; ++a) {
-        comp_ext_enable(a);
-    }
+void unmute() { // автоматы стояли — взводим заново
+    muted = 0;
+    need_reset = 1;
 }
 
 // UART Send-Recive
@@ -426,10 +384,10 @@ void USART2_IRQ() {
     }
 }
 
-// (100ns)
+// p — в прежних тиках TIM2 (≈100 нс)
 void pause(const uint& p) { // TIM2 не обнуляем: он же метка времени замеров
     const uint32_t s = TIM2->CNT;
-    while (TIM2->CNT - s < p) {}
+    while (TIM2->CNT - s < p * TICK_OLD) {}
 }
 
 uint32_t sat(const uint32_t t) {
@@ -461,51 +419,12 @@ conv16to8x2 convert16to8x2(const int& a) { // TODO AI - Проблема: Неп
 }
 
 // COMPs controls
-void setCOMP_extVoltage_Up(const int& compN) {
-    const exti_prN& tmp = reg_flags[compN];
-    CLEAR_BIT(*tmp.ftsrX, tmp.line); // LL_EXTI_DisableFallingTrig_0_31(LL_EXTI_LINE_21);
-    SET_BIT(*tmp.rtsrX, tmp.line); // LL_EXTI_EnableRisingTrig_0_31(LL_EXTI_LINE_21);
-    WRITE_REG(*tmp.prX, tmp.line); // LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_21);
-    CLEAR_BIT(*tmp.emrX, tmp.line); // LL_EXTI_DisableEvent_0_31(LL_EXTI_LINE_21);
-}
-
-void setCOMP_extVoltage_Down(const int& compN) {
-    const exti_prN& tmp = reg_flags[compN];
-    CLEAR_BIT(*tmp.rtsrX, tmp.line); // LL_EXTI_DisableRisingTrig_0_31(LL_EXTI_LINE_21);
-    SET_BIT(*tmp.ftsrX, tmp.line); // LL_EXTI_EnableFallingTrig_0_31(LL_EXTI_LINE_21);
-    WRITE_REG(*tmp.prX, tmp.line); // LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_21);
-    CLEAR_BIT(*tmp.emrX, tmp.line); // LL_EXTI_DisableEvent_0_31(LL_EXTI_LINE_21);
-}
-
-void set_ALL_COMP_extVoltage_Up() {
-    for (int i = 0; i < 7; ++i) {
-        setCOMP_extVoltage_Up(i);
-    }
-}
-
-void set_ALL_COMP_extVoltage_Down() {
-    for (int i = 0; i < 7; ++i) {
-        setCOMP_extVoltage_Down(i);
-    }
-}
-
-void comp_ext_enable(const int& compN) {
-    const exti_prN& tmp = reg_flags[compN];
-    SET_BIT(*tmp.imrX, tmp.line); // LL_EXTI_EnableIT_X_XX(LL_EXTI_LINE_XX);
-}
-
-void comp_ext_disable(const int& compN) {
-    const exti_prN& tmp = reg_flags[compN];
-    WRITE_REG(*tmp.prX, tmp.line); // LL_EXTI_ClearFlag_X_XX(LL_EXTI_LINE_XX);
-    CLEAR_BIT(*tmp.imrX, tmp.line); // LL_EXTI_DisableIT_X_XX(LL_EXTI_LINE_XX);
-}
-
 void comp_set_data(const int& compN, const int& data) {
-    MODIFY_REG(*reg_flags[compN].pregSet, DAC_DHR12R1_DACC1DHR, data); // LL_DAC_ConvertData12RightAligned(DAC1, LL_DAC_CHANNEL_1, data);
+    MODIFY_REG(*dac_regs[compN].pregSet, DAC_DHR12R1_DACC1DHR, data); // LL_DAC_ConvertData12RightAligned(DAC1, LL_DAC_CHANNEL_1, data);
 }
 
 uint32_t comp_read_data(const int& compN) {
-    return READ_BIT(*reg_flags[compN].pregRead, DAC_DOR1_DACC1DOR); // data = LL_DAC_RetrieveOutputData(DAC1, LL_DAC_CHANNEL_1);
+    return READ_BIT(*dac_regs[compN].pregRead, DAC_DOR1_DACC1DOR); // data = LL_DAC_RetrieveOutputData(DAC1, LL_DAC_CHANNEL_1);
 }
 
 COMP_TypeDef* comp_def(const int& i) { // TODO ?
@@ -534,170 +453,233 @@ COMP_TypeDef* comp_def(const int& i) { // TODO ?
     }
 }
 
-// COMPs IQR Handlers
-void COMP1_2_3_IRQ() { // line 21, 22, 29
-    const uint32_t t = TIM2->CNT;
-    if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_21)) {
-        comp_ext_disable(0);
-        jump_func(0, t);
-    }
-    if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_22)) {
-        comp_ext_disable(1);
-        jump_func(1, t);
-    }
-    if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_29)) {
-        comp_ext_disable(2);
-        jump_func(2, t);
+// Захват: выход компаратора → вход таймера (TISEL), метку пишет таймер.
+// CubeMX (comp.c, tim.c) включает компараторам EXTI и прерывания, а TIM2/TIM5 даёт PSC 13 и 13599 — здесь переделываем.
+void cap_init() {
+    NVIC_DisableIRQ(COMP1_2_3_IRQn);
+    NVIC_DisableIRQ(COMP4_5_6_IRQn);
+    NVIC_DisableIRQ(COMP7_IRQn);
+    LL_EXTI_DisableIT_0_31(LL_EXTI_LINE_21 | LL_EXTI_LINE_22 | LL_EXTI_LINE_29 | LL_EXTI_LINE_30 | LL_EXTI_LINE_31);
+    LL_EXTI_DisableIT_32_63(LL_EXTI_LINE_32 | LL_EXTI_LINE_33);
+    LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_21 | LL_EXTI_LINE_22 | LL_EXTI_LINE_29 | LL_EXTI_LINE_30 | LL_EXTI_LINE_31);
+    LL_EXTI_ClearFlag_32_63(LL_EXTI_LINE_32 | LL_EXTI_LINE_33);
+    NVIC_ClearPendingIRQ(COMP1_2_3_IRQn);
+    NVIC_ClearPendingIRQ(COMP4_5_6_IRQn);
+    NVIC_ClearPendingIRQ(COMP7_IRQn);
+
+    LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_TIM3);
+    LL_TIM_SetAutoReload(TIM3, 0xFFFF);
+    LL_TIM_SetRemap(TIM2, LL_TIM_TIM2_TI1_RMP_COMP5 | LL_TIM_TIM2_TI2_RMP_COMP6 | LL_TIM_TIM2_TI3_RMP_COMP4 | LL_TIM_TIM2_TI4_RMP_COMP1);
+    LL_TIM_SetRemap(TIM5, LL_TIM_TIM5_TI1_RMP_COMP7 | LL_TIM_TIM5_TI2_RMP_COMP2);
+    LL_TIM_SetRemap(TIM3, LL_TIM_TIM3_TI1_RMP_COMP3);
+    LL_TIM_SetPrescaler(TIM2, 0);
+    LL_TIM_SetPrescaler(TIM3, 0);
+    LL_TIM_SetPrescaler(TIM5, 0);
+    LL_TIM_GenerateEvent_UPDATE(TIM2); // PSC вступает по событию обновления
+    LL_TIM_GenerateEvent_UPDATE(TIM3);
+    LL_TIM_GenerateEvent_UPDATE(TIM5);
+    for (int i = 0; i < 7; ++i) { // делитель захвата 1, фильтр выключен — по сбросу
+        LL_TIM_IC_SetActiveInput(cap[i].tim, cap[i].ch, LL_TIM_ACTIVEINPUT_DIRECTTI);
     }
 }
 
-void COMP4_5_6_IRQ(void) { // line 30, 31, 32
-    const uint32_t t = TIM2->CNT;
-    if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_30)) {
-        comp_ext_disable(3);
-        jump_func(3, t);
-    }
-    if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_31)) {
-        comp_ext_disable(4);
-        jump_func(4, t);
-    }
-    if (LL_EXTI_IsActiveFlag_32_63(LL_EXTI_LINE_32)) {
-        comp_ext_disable(5);
-        jump_func(5, t);
-    }
+// Захват канала i: on — CCxE, rising — фронт, иначе спад. CCER общий у каналов таймера, а пишут его
+// и основной цикл, и USART2_IRQ (cap_off) — чтение-изменение-запись без прерываний.
+void cap_set(const int i, const bool on, const bool rising) {
+    const uint32_t e = cap[i].ch;
+    const uint32_t pm = __get_PRIMASK();
+    __disable_irq();
+    MODIFY_REG(cap[i].tim->CCER, e | e << 1 | e << 3, (on ? e : 0) | (rising ? 0 : e << 1)); // CCxE, CCxP, CCxNP
+    __set_PRIMASK(pm);
 }
 
-void COMP7_IRQ(void) { // line 33
-    const uint32_t t = TIM2->CNT;
-    if (LL_EXTI_IsActiveFlag_32_63(LL_EXTI_LINE_33)) {
-        comp_ext_disable(6);
-        jump_func(6, t);
-    }
+void cap_off(const int i) {
+    const uint32_t pm = __get_PRIMASK();
+    __disable_irq();
+    CLEAR_BIT(cap[i].tim->CCER, cap[i].ch);
+    __set_PRIMASK(pm);
 }
 
-void jump_off(const int& a, const uint32_t& t) { // OFF: чётное f — ждём фронт, нечётное — фронт был (шаг в off_step)
-    if (f[a] == 0) {      // R↓: демпфер пошёл со струн
-        f[a] = 1;
-        t_rdown[a] = t;
+// Событие канала i: 0 — нет; 1 — фронт, t — метка таймера; 2 — «опоздавшее» (взвод застал сигнал
+// уже за порогом), t — момент проверки по TIM2, ошибка до двух SETTLE и прохода цикла.
+uint8_t take(const int i, uint32_t& t) {
+    if (late[i]) {
+        late[i] = 0;
+        t = t_late[i];
+        return 2;
     }
-    else if (f[a] == 2) { // G↓: клавиша внизу
-        f[a] = 3;
-        t_gdown[a] = t;
+    const cap_ch& c = cap[i];
+    if (!(c.tim->SR & 1u << c.n)) {
+        return 0;
     }
-    else if (f[a] == 4) { // G↑: клавиша пошла вверх
-        f[a] = 5;
-        tim[a][0] = t;
+    t = (&c.tim->CCR1)[c.n - 1];    // чтение сбрасывает CCxIF
+    c.tim->SR = ~(1u << (c.n + 8)); // CCxOF: до чтения успел ещё фронт — в CCR метка последнего
+    if (c.tim == TIM3) {            // 16 бит: возраст метки считаем по TIM2 (k3 — сдвиг TIM3 относительно TIM2)
+        const uint32_t now = TIM2->CNT;
+        t = now - (uint16_t)(now - k3 - t);
     }
-    else if (f[a] == 6) { // R↑: демпфер лёг
-        f[a] = 7;
-        tim[a][1] = t;
+    return 1;
+}
+
+// Перевзвод канала i на порог dac (rising — фронт, иначе спад), затем состояние wait. Без ожидания на месте:
+// дальше шаги делает arm_busy(). preset — сначала ЦАП в край (выход компаратора «до фронта», гистерезис
+// в известном состоянии). Пока ЦАП устанавливается, захват выключен: скачок порога — не фронт.
+// check — по окончании проверить уровень: сигнал уже за порогом — событие «опоздавшее» (take() == 2).
+void arm(const int i, const int dac, const bool rising, const int8_t wait, const bool preset, const bool check) {
+    cap_set(i, false, rising);
+    f[i] = wait;
+    late[i] = 0;
+    arm_dac[i] = dac;
+    arm_rise[i] = rising;
+    arm_check[i] = check;
+    arm_probe[i] = 0;
+    comp_set_data(i, preset ? (rising ? 4095 : 0) : dac);
+    arm_t[i] = TIM2->CNT;
+    arm_step[i] = preset ? 1 : 2;
+}
+
+// Проба: сигнал уже за порогом dac в сторону фронта rising? Захват остаётся выключенным,
+// ответ — probe_res[i] в состоянии wait; дальше — arm() или comp_idle().
+void probe(const int i, const int dac, const bool rising, const int8_t wait) {
+    arm(i, dac, rising, wait, true, false);
+    arm_probe[i] = 1;
+}
+
+// Шаг взвода/пробы; true — ЦАП ещё устанавливается, автомат клавиши ждёт
+bool arm_busy(const int i) {
+    if (!arm_step[i]) {
+        return false;
+    }
+    const uint32_t now = TIM2->CNT;
+    if (now - arm_t[i] < SETTLE) {
+        return true;
+    }
+    if (arm_step[i] == 1) {
+        comp_set_data(i, arm_dac[i]);
+        arm_t[i] = now;
+        arm_step[i] = 2;
+        return true;
+    }
+    arm_step[i] = 0;
+    if (arm_probe[i]) {
+        probe_res[i] = past(i, arm_rise[i]);
+        return false;
+    }
+    const cap_ch& c = cap[i];
+    c.tim->SR = ~(1u << c.n | 1u << (c.n + 8)); // старые CCxIF/CCxOF
+    cap_set(i, true, arm_rise[i]);
+    // уровень — раньше флага: фронт между ними попадёт во флаг, а не в «опоздавшие»
+    if (arm_check[i] && past(i, arm_rise[i]) && !(c.tim->SR & 1u << c.n)) {
+        late[i] = 1;
+        t_late[i] = TIM2->CNT;
+    }
+    return false;
+}
+
+// Выход компаратора уже за порогом в сторону фронта (rising — выше, иначе ниже)?
+bool past(const int i, const bool rising) {
+    return (LL_COMP_ReadOutputLevel(comp_def(i)) == LL_COMP_OUTPUT_LEVEL_HIGH) == rising;
+}
+
+// Автомат ON-датчика. Сигнал падает при ударе: G = comp[i][0] > R = comp[i][1], оба порога — спадом.
+// G↓ (t0) → R↓ (t1): note-on со скоростью t1−t0. Окна — от аппаратных меток, а не от того, когда их увидел цикл.
+void on_step(const uint8_t i, const uint8_t n) {
+    if (arm_busy(i)) return;
+    uint32_t t;
+    switch (f[i]) {
+    case 0: // ждём G↓
+        if (take(i, t)) {
+            tim[i][0] = t;
+            arm(i, comp[i][1], false, 2, false, true); // R уже пройден за время взвода — note-on «опоздавший»
+        }
+        break;
+    case 2: // ждём R↓; за windowReTRigger1 от G↓ не дошла — снова G
+        if (take(i, t)) {
+            tim[i][1] = t;
+            ev_push(n, sat(timeLength(tim[i][0], t)));
+            cap_off(i);
+            f[i] = 4;
+        }
+        else if (TIM2->CNT - tim[i][0] > windowReTRigger1) {
+            arm(i, comp[i][0], false, 0, false, false);
+        }
+        break;
+    case 4: // note-on отправлен; windowReTRigger2 от R↓ — снова G
+        if (TIM2->CNT - tim[i][1] > windowReTRigger2) {
+            arm(i, comp[i][0], false, 0, false, false);
+        }
+        break;
     }
 }
 
 // Автомат OFF-датчика. Сигнал растёт к покою (демпфер на струнах): G = comp[i][0] < R = comp[i][1].
 // Подъём демпфера: R↓ → G↓ (скорость — интервал R↓→G↓). Опускание: G↑ (t0) → R↑ (t1) — note-off со скоростью t1−t0.
 // Ниже R, но за OFF_LIFT_WAIT не дошла до G — подъём без скорости; вернулась выше R раньше — помеха, молчим
-// (так же гасится дребезг посадки демпфера). Пока клавиша между R и G, раз в OFF_POLL проверяется второй порог.
+// (так же гасится дребезг посадки демпфера). Пока клавиша между R и G, раз в OFF_POLL — проба второго порога
+// (состояния 3 и 7). Проба уводит ЦАП с ожидаемого порога: фронт, пришедший за это время, будет «опоздавшим».
 void off_step(const uint8_t i, const uint8_t n) {
-    const uint32_t now = TIM5->CNT;
+    if (arm_busy(i)) return;
+    const uint32_t now = TIM2->CNT;
+    uint32_t t;
+    uint8_t e;
     switch (f[i]) {
-    case 1: // R↓
-        tim_off[i][0] = now;
-        tim_poll[i] = now;
-        rearm(i, comp[i][0], false, 2);
+    case 0: // ждём R↓: демпфер пошёл со струн
+        if (!(e = take(i, t))) break;
+        t_rdown[i] = t;
+        r_late[i] = e == 2; // R↓ застал взвод (клавиша нажата во время сброса): момент неизвестен
+        tim_poll[i] = t;
+        arm(i, comp[i][0], false, 2, true, true);
         break;
-    case 2: // ждём G↓; не вернулась ли выше R?
-        if (now - tim_poll[i] < OFF_POLL) break;
-        tim_poll[i] = now;
-        if (level_past(i, comp[i][1], true)) {
+    case 2: // ждём G↓: клавиша внизу
+        if (take(i, t)) {
+            if (!lifted[i]) {
+                lifted[i] = 1;
+                const uint32_t len = sat(timeLength(t_rdown[i], t));
+                if (SEND_LIFT) ev_push(n, LIFT_FLAG | (r_late[i] ? 0 : (len ? len : 1)));
+            }
+            arm(i, comp[i][0], true, 4, true, true);
+        }
+        else if (now - tim_poll[i] >= OFF_POLL) {
+            tim_poll[i] = now;
+            probe(i, comp[i][1], true, 3);
+        }
+        break;
+    case 3: // проба из 2: не вернулась ли выше R?
+        if (probe_res[i]) {
             if (lifted[i]) ev_push(n, LEN_NONE); // неглубокое нажатие отпущено: демпфер лёг, скорость не замерить
             comp_idle(i);
             break;
         }
-        if (!lifted[i] && now - tim_off[i][0] > OFF_LIFT_WAIT) {
+        if (!lifted[i] && now - t_rdown[i] > OFF_LIFT_WAIT) {
             lifted[i] = 1;
             if (SEND_LIFT) ev_push(n, LIFT_FLAG);
         }
-        rearm(i, comp[i][0], false, 2);
+        arm(i, comp[i][0], false, 2, true, true);
         break;
-    case 3: // G↓
-        if (!lifted[i]) {
-            lifted[i] = 1;
-            const uint32_t len = sat(timeLength(t_rdown[i], t_gdown[i]));
-            if (SEND_LIFT) ev_push(n, LIFT_FLAG | (r_late[i] ? 0 : (len ? len : 1)));
+    case 4: // ждём G↑: клавиша пошла вверх
+        if (!take(i, t)) break;
+        tim[i][0] = t;
+        tim_poll[i] = t;
+        arm(i, comp[i][1], true, 6, true, true);
+        break;
+    case 6: // ждём R↑: демпфер лёг
+        if (take(i, t)) {
+            ev_push(n, sat(timeLength(tim[i][0], t)));
+            comp_idle(i);
         }
-        rearm(i, comp[i][0], true, 4);
+        else if (now - tim_poll[i] >= OFF_POLL) {
+            tim_poll[i] = now;
+            probe(i, comp[i][0], false, 7);
+        }
         break;
-    case 5: // G↑, t0 в tim[i][0]
-        tim_poll[i] = now;
-        rearm(i, comp[i][1], true, 6);
-        break;
-    case 6: // ждём R↑; не вернулась ли ниже G (дребезг у дна, повтор без посадки демпфера)?
-        if (now - tim_poll[i] < OFF_POLL) break;
-        tim_poll[i] = now;
-        if (level_past(i, comp[i][0], false)) {
-            rearm(i, comp[i][0], true, 4); // снова внизу: t0 даст следующий G↑
+    case 7: // проба из 6: не вернулась ли ниже G (дребезг у дна, повтор без посадки демпфера)?
+        if (probe_res[i]) {
+            arm(i, comp[i][0], true, 4, true, true); // снова внизу: t0 даст следующий G↑
         }
         else {
-            rearm(i, comp[i][1], true, 6);
+            arm(i, comp[i][1], true, 6, true, true);
         }
         break;
-    case 7: // R↑
-        ev_push(n, sat(timeLength(tim[i][0], tim[i][1])));
-        comp_idle(i);
-        break;
-    }
-}
-
-// Перевзвод на порог dac (фронт rising или спад), ожидание в состоянии wait. Если сигнал уже за
-// порогом (фронт прошёл, пока EXTI был выключен), шаг делается сразу — как из прерывания.
-void rearm(const int i, const int dac, const bool rising, const int8_t wait) {
-    comp_ext_disable(i);
-    f[i] = wait;
-    comp_preset(i, dac, rising);
-    if (rising) setCOMP_extVoltage_Up(i); // и сброс ложного фронта от скачка ЦАП
-    else setCOMP_extVoltage_Down(i);
-    comp_ext_enable(i);
-    __disable_irq();
-    const bool high = LL_COMP_ReadOutputLevel(comp_def(i)) == LL_COMP_OUTPUT_LEVEL_HIGH;
-    if (f[i] == wait && high == rising) {
-        comp_ext_disable(i);
-        const uint32_t t = TIM2->CNT;
-        jump_func(i, t);
-    }
-    __enable_irq();
-}
-
-// Сигнал уже за порогом dac в сторону фронта (rising — выше, иначе ниже; с запасом в гистерезис)?
-// EXTI остаётся выключенным — дальше rearm или comp_idle.
-bool level_past(const int i, const int dac, const bool rising) {
-    comp_ext_disable(i);
-    comp_preset(i, dac, rising);
-    return (LL_COMP_ReadOutputLevel(comp_def(i)) == LL_COMP_OUTPUT_LEVEL_HIGH) == rising;
-}
-
-// ЦАП в край (выход компаратора — «до фронта», гистерезис в известном состоянии), затем порог dac
-void comp_preset(const int i, const int dac, const bool rising) {
-    comp_set_data(i, rising ? 4095 : 0);
-    settle();
-    comp_set_data(i, dac);
-    settle();
-}
-
-// установка ЦАП + компаратора после смены порога: 30 тиков TIM2 ≈ 3 мкс
-void settle() {
-    const uint32_t s = TIM2->CNT;
-    while (TIM2->CNT - s < 30) {}
-}
-
-void jump_on(const int& a, const uint32_t& t) {
-    if (f[a] == 0) {
-        f[a] = 1;
-        tim[a][0] = t;
-    }
-    if (f[a] == 2) {
-        f[a] = 3;
-        tim[a][1] = t;
     }
 }
 
@@ -705,74 +687,32 @@ void reg_init() {
     for (int i = 0; i < 7; ++i) {
         switch (i) {
         case 0:
-            reg_flags[i].line = LL_EXTI_LINE_21;
-            reg_flags[i].prX = &EXTI->PR1; // LL_EXTI_ClearFlag_X_XX(LL_EXTI_LINE_XX)
-            reg_flags[i].imrX = &EXTI->IMR1; // LL_EXTI_ .. En ... Dis ...ableIT_X_XX(LL_EXTI_LINE_XX);
-            reg_flags[i].emrX = &EXTI->EMR1; // LL_EXTI_ .. En ... Dis ...ableEvent_0_31(LL_EXTI_LINE_21);
-            reg_flags[i].ftsrX = &EXTI->FTSR1; // LL_EXTI_ .. En ... Dis ...ableFallingTrig_0_31(LL_EXTI_LINE_21);
-            reg_flags[i].rtsrX = &EXTI->RTSR1; // LL_EXTI_ .. En ... Dis ...ableRisingTrig_0_31(LL_EXTI_LINE_21);
-            reg_flags[i].pregSet = __DAC_PTR_REG_OFFSET(DAC1->DHR12R1, (LL_DAC_CHANNEL_1 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
-            reg_flags[i].pregRead = __DAC_PTR_REG_OFFSET(DAC1->DOR1, (LL_DAC_CHANNEL_1 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
+            dac_regs[i].pregSet = __DAC_PTR_REG_OFFSET(DAC1->DHR12R1, (LL_DAC_CHANNEL_1 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
+            dac_regs[i].pregRead = __DAC_PTR_REG_OFFSET(DAC1->DOR1, (LL_DAC_CHANNEL_1 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
             break;
         case 1:
-            reg_flags[i].line = LL_EXTI_LINE_22;
-            reg_flags[i].prX = &EXTI->PR1;
-            reg_flags[i].imrX = &EXTI->IMR1;
-            reg_flags[i].emrX = &EXTI->EMR1;
-            reg_flags[i].ftsrX = &EXTI->FTSR1;
-            reg_flags[i].rtsrX = &EXTI->RTSR1;
-            reg_flags[i].pregSet = __DAC_PTR_REG_OFFSET(DAC1->DHR12R1, (LL_DAC_CHANNEL_2 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
-            reg_flags[i].pregRead = __DAC_PTR_REG_OFFSET(DAC1->DOR1, (LL_DAC_CHANNEL_2 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
+            dac_regs[i].pregSet = __DAC_PTR_REG_OFFSET(DAC1->DHR12R1, (LL_DAC_CHANNEL_2 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
+            dac_regs[i].pregRead = __DAC_PTR_REG_OFFSET(DAC1->DOR1, (LL_DAC_CHANNEL_2 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
             break;
         case 2:
-            reg_flags[i].line = LL_EXTI_LINE_29;
-            reg_flags[i].prX = &EXTI->PR1;
-            reg_flags[i].imrX = &EXTI->IMR1;
-            reg_flags[i].emrX = &EXTI->EMR1;
-            reg_flags[i].ftsrX = &EXTI->FTSR1;
-            reg_flags[i].rtsrX = &EXTI->RTSR1;
-            reg_flags[i].pregSet = __DAC_PTR_REG_OFFSET(DAC3->DHR12R1, (LL_DAC_CHANNEL_1 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
-            reg_flags[i].pregRead = __DAC_PTR_REG_OFFSET(DAC3->DOR1, (LL_DAC_CHANNEL_1 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
+            dac_regs[i].pregSet = __DAC_PTR_REG_OFFSET(DAC3->DHR12R1, (LL_DAC_CHANNEL_1 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
+            dac_regs[i].pregRead = __DAC_PTR_REG_OFFSET(DAC3->DOR1, (LL_DAC_CHANNEL_1 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
             break;
         case 3:
-            reg_flags[i].line = LL_EXTI_LINE_30;
-            reg_flags[i].prX = &EXTI->PR1;
-            reg_flags[i].imrX = &EXTI->IMR1;
-            reg_flags[i].emrX = &EXTI->EMR1;
-            reg_flags[i].ftsrX = &EXTI->FTSR1;
-            reg_flags[i].rtsrX = &EXTI->RTSR1;
-            reg_flags[i].pregSet = __DAC_PTR_REG_OFFSET(DAC3->DHR12R1, (LL_DAC_CHANNEL_2 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
-            reg_flags[i].pregRead = __DAC_PTR_REG_OFFSET(DAC3->DOR1, (LL_DAC_CHANNEL_2 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
+            dac_regs[i].pregSet = __DAC_PTR_REG_OFFSET(DAC3->DHR12R1, (LL_DAC_CHANNEL_2 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
+            dac_regs[i].pregRead = __DAC_PTR_REG_OFFSET(DAC3->DOR1, (LL_DAC_CHANNEL_2 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
             break;
         case 4:
-            reg_flags[i].line = LL_EXTI_LINE_31;
-            reg_flags[i].prX = &EXTI->PR1;
-            reg_flags[i].imrX = &EXTI->IMR1;
-            reg_flags[i].emrX = &EXTI->EMR1;
-            reg_flags[i].ftsrX = &EXTI->FTSR1;
-            reg_flags[i].rtsrX = &EXTI->RTSR1;
-            reg_flags[i].pregSet = __DAC_PTR_REG_OFFSET(DAC4->DHR12R1, (LL_DAC_CHANNEL_1 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
-            reg_flags[i].pregRead = __DAC_PTR_REG_OFFSET(DAC4->DOR1, (LL_DAC_CHANNEL_1 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
+            dac_regs[i].pregSet = __DAC_PTR_REG_OFFSET(DAC4->DHR12R1, (LL_DAC_CHANNEL_1 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
+            dac_regs[i].pregRead = __DAC_PTR_REG_OFFSET(DAC4->DOR1, (LL_DAC_CHANNEL_1 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
             break;
         case 5:
-            reg_flags[i].line = LL_EXTI_LINE_32;
-            reg_flags[i].prX = &EXTI->PR2;
-            reg_flags[i].imrX = &EXTI->IMR2;
-            reg_flags[i].emrX = &EXTI->EMR2;
-            reg_flags[i].ftsrX = &EXTI->FTSR2;
-            reg_flags[i].rtsrX = &EXTI->RTSR2;
-            reg_flags[i].pregSet = __DAC_PTR_REG_OFFSET(DAC4->DHR12R1, (LL_DAC_CHANNEL_2 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
-            reg_flags[i].pregRead = __DAC_PTR_REG_OFFSET(DAC4->DOR1, (LL_DAC_CHANNEL_2 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
+            dac_regs[i].pregSet = __DAC_PTR_REG_OFFSET(DAC4->DHR12R1, (LL_DAC_CHANNEL_2 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
+            dac_regs[i].pregRead = __DAC_PTR_REG_OFFSET(DAC4->DOR1, (LL_DAC_CHANNEL_2 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
             break;
         case 6:
-            reg_flags[i].line = LL_EXTI_LINE_33;
-            reg_flags[i].prX = &EXTI->PR2;
-            reg_flags[i].imrX = &EXTI->IMR2;
-            reg_flags[i].emrX = &EXTI->EMR2;
-            reg_flags[i].ftsrX = &EXTI->FTSR2;
-            reg_flags[i].rtsrX = &EXTI->RTSR2;
-            reg_flags[i].pregSet = __DAC_PTR_REG_OFFSET(DAC2->DHR12R1, (LL_DAC_CHANNEL_1 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
-            reg_flags[i].pregRead = __DAC_PTR_REG_OFFSET(DAC2->DOR1, (LL_DAC_CHANNEL_1 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
+            dac_regs[i].pregSet = __DAC_PTR_REG_OFFSET(DAC2->DHR12R1, (LL_DAC_CHANNEL_1 >> DAC_REG_DHR12RX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DHR_REGOFFSET_MASK_POSBIT0);
+            dac_regs[i].pregRead = __DAC_PTR_REG_OFFSET(DAC2->DOR1, (LL_DAC_CHANNEL_1 >> DAC_REG_DORX_REGOFFSET_BITOFFSET_POS) & DAC_REG_DORX_REGOFFSET_MASK_POSBIT0);
             break;
 
         default:
