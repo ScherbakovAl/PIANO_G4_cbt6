@@ -1,0 +1,6 @@
+Что поменять в CubeMX:
+
+COMP1…COMP7: Trigger Mode → без прерывания (сейчас IT_FALLING).
+NVIC: снять галочки COMP1_2_3, COMP4_5_6, COMP7.
+TIM2 и TIM5: Prescaler 0 (сейчас 13 и 13599).
+По желанию включить в Cube TIM3 (PSC 0, ARR 65535). Код это и так делает сам.
