@@ -93,7 +93,7 @@ void g4() {
 // TIM2, TIM3, TIM5 - presc = 0 - 7.35ns период
 
     if (chipAdress <= 13) { // ship ON
-        windowReTRigger1 = 30000 * TICK_US; // = 30ms
+        windowReTRigger1 = 55000 * TICK_US; // = 55ms но не выше 61ms - ограничение канала связи
         windowReTRigger2 = 50000 * TICK_US; // = 50ms
     }
     reset_all(); // взвод: ON ждёт G↓, OFF — R↓ (подъём демпфера)
